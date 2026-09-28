@@ -3,10 +3,11 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { orbs } from '@/registry/registry';
 import { readAdapterFiles, readOrbFiles, readSharedFiles } from '@/registry/read-files';
-import { buildUsageSnippet } from '@/registry/prompt';
 import { OrbCard, type OrbCardData } from '@/components/orb-card';
 import { CodePane } from '@/components/code-pane';
 import { ArrowLeftIcon, ArrowRightIcon } from '@/components/orb-icons';
+import { RecipeLinks } from '@/components/recipe-link';
+import { techInfo } from '@/components/tech-info';
 import { PropsTable } from './props-table';
 
 export const dynamicParams = false;
@@ -61,8 +62,10 @@ const Page = async ({ params }: { params: Promise<{ id: string }> }) => {
   if (index === -1) notFound();
 
   const orb = orbs[index];
-  const prev = orbs[(index - 1 + orbs.length) % orbs.length];
-  const next = orbs[(index + 1) % orbs.length];
+  const prevIndex = (index - 1 + orbs.length) % orbs.length;
+  const nextIndex = (index + 1) % orbs.length;
+  const prev = orbs[prevIndex];
+  const next = orbs[nextIndex];
   const [files, shared, adapters] = await Promise.all([
     readOrbFiles(orb),
     readSharedFiles(),
@@ -82,38 +85,32 @@ const Page = async ({ params }: { params: Promise<{ id: string }> }) => {
   };
 
   const component = orb.name.replace(/\s+/g, '');
-  const usage = buildUsageSnippet(component, {
-    state: 'idle',
-    size: orb.defaultSize,
-    speed: 1,
-    colorFrom: orb.defaultColorFrom,
-    colorTo: orb.defaultColorTo,
-  });
+  const info = techInfo(orb.tech);
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-5 sm:py-16">
-      <nav aria-label="Breadcrumb" className="mb-8 flex flex-wrap items-center gap-3 text-sm text-muted">
-        <Link href="/" className="inline-flex items-center gap-1.5 transition-colors hover:text-accent-foreground">
+      <nav aria-label="Breadcrumb" className="mb-8 text-sm text-muted">
+        <Link
+          href={`/#${orb.id}`}
+          className="inline-flex min-h-10 items-center gap-1.5 transition-colors hover:text-accent-foreground"
+        >
           <ArrowLeftIcon />
           All orbs
-        </Link>
-        <span aria-hidden="true" className="h-4 w-px bg-border" />
-        <Link href={`/#${orb.id}`} className="transition-colors hover:text-accent-foreground">
-          View in gallery
         </Link>
       </nav>
 
       <header className="mb-10 max-w-2xl">
         <p className="mb-3 inline-block rounded-full border border-border px-3 py-1 text-xs text-muted">
-          {orb.tech}
+          {info.label}
           {orb.dependencies.length === 0 ? ' · zero deps' : ''}
         </p>
         <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-5xl">{orb.name}</h1>
         <p className="mt-4 text-pretty text-base text-muted">{orb.tagline}</p>
+        {info.cost && <p className="mt-2 text-sm text-muted">Rendering cost: {info.cost.toLowerCase()}.</p>}
       </header>
 
       <section aria-label="Playground" className="mb-14">
-        <OrbCard orb={data} shared={shared} adapters={adapters} hideDetailsLink hideHeader />
+        <OrbCard orb={data} shared={shared} adapters={adapters} hideHeader />
       </section>
 
       <section className="mb-14">
@@ -123,25 +120,6 @@ const Page = async ({ params }: { params: Promise<{ id: string }> }) => {
           keep the props.
         </p>
         <PropsTable />
-      </section>
-
-      <section className="mb-14">
-        <h2 className="mb-4 text-xl font-semibold">Usage</h2>
-        <p className="mb-4 max-w-2xl text-sm text-muted">
-          Copy the component files from the playground above, then render the orb with its default
-          configuration.
-          {orb.dependencies.length > 0 && (
-            <>
-              {' '}
-              First install{' '}
-              <code className="rounded bg-panel px-1.5 py-0.5 font-mono text-xs text-foreground">
-                {orb.dependencies.join(' ')}
-              </code>
-              .
-            </>
-          )}
-        </p>
-        <CodePane code={usage} />
       </section>
 
       <section className="mb-14">
@@ -156,33 +134,45 @@ const Page = async ({ params }: { params: Promise<{ id: string }> }) => {
           the value is negative the orb falls back to its procedural animation.
         </p>
         <CodePane code={wireSnippet(component, orb.id)} />
+        <p className="mt-6 mb-3 max-w-2xl text-sm text-muted">
+          Using Vapi, ElevenLabs, LiveKit or OpenAI Realtime? The recipes map each provider to{' '}
+          <code className="font-mono text-xs text-foreground">state</code> and{' '}
+          <code className="font-mono text-xs text-foreground">levelRef</code>.
+        </p>
+        <RecipeLinks />
       </section>
 
-      <nav aria-label="Orb navigation" className="grid gap-4 border-t border-border pt-8 sm:grid-cols-2">
-        <Link
-          href={`/orbs/${prev.id}`}
-          className="group rounded-2xl border border-border bg-panel/60 p-5 transition-colors hover:border-accent"
-        >
-          <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-            <ArrowLeftIcon />
-            Previous
-          </span>
-          <span className="mt-1 block font-semibold text-foreground transition-colors group-hover:text-accent-foreground">
-            {prev.name}
-          </span>
-        </Link>
-        <Link
-          href={`/orbs/${next.id}`}
-          className="group rounded-2xl border border-border bg-panel/60 p-5 text-right transition-colors hover:border-accent"
-        >
-          <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-            Next
-            <ArrowRightIcon />
-          </span>
-          <span className="mt-1 block font-semibold text-foreground transition-colors group-hover:text-accent-foreground">
-            {next.name}
-          </span>
-        </Link>
+      <nav aria-label="Orb navigation" className="border-t border-border pt-8">
+        <p className="mb-4 text-center text-xs text-muted tabular-nums">
+          <span className="sr-only">Orb </span>
+          {index + 1} / {orbs.length}
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Link
+            href={`/orbs/${prev.id}`}
+            className="group rounded-2xl border border-border bg-panel/60 p-5 transition-colors hover:border-accent"
+          >
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted tabular-nums">
+              <ArrowLeftIcon />
+              Previous · {prevIndex + 1} / {orbs.length}
+            </span>
+            <span className="mt-1 block font-semibold text-foreground transition-colors group-hover:text-accent-foreground">
+              {prev.name}
+            </span>
+          </Link>
+          <Link
+            href={`/orbs/${next.id}`}
+            className="group rounded-2xl border border-border bg-panel/60 p-5 text-right transition-colors hover:border-accent"
+          >
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted tabular-nums">
+              Next · {nextIndex + 1} / {orbs.length}
+              <ArrowRightIcon />
+            </span>
+            <span className="mt-1 block font-semibold text-foreground transition-colors group-hover:text-accent-foreground">
+              {next.name}
+            </span>
+          </Link>
+        </div>
       </nav>
     </main>
   );

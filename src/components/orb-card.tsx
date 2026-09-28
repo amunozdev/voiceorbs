@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { RefObject } from 'react';
-import Link from 'next/link';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import clsx from 'clsx';
 import { ORB_STATES, type OrbState } from '@/registry/lib/orb-state';
 import { OrbStatus } from '@/registry/lib/orb-status';
@@ -20,14 +19,17 @@ import { CodeBlock } from './code-block';
 import { CopyButton } from './copy-button';
 import { ColorField } from './color-field';
 import { ColorPresetSwatches } from './color-preset-swatches';
-import { presetsForOrb } from './color-presets';
+import { findPreset, presetsForOrb } from './color-presets';
 import { SegmentedControl } from './segmented-control';
 import { SPEED_PRESETS, sizePresetsForOrb } from './control-presets';
 import { InstallBlock } from './install-block';
 import { OpenInStackblitz } from './open-in-stackblitz';
-import { PlayIcon, PauseIcon, MicIcon, MicOffIcon, SoundIcon, SoundOffIcon, ArrowRightIcon } from './orb-icons';
+import { Disclosure } from './disclosure';
+import { PlayIcon, PauseIcon, MicIcon, MicOffIcon, SoundIcon, SoundOffIcon } from './orb-icons';
 import { Select } from './select';
+import { PROVIDERS, PROVIDER_STORAGE_KEY, PROVIDER_VALUES } from './providers';
 import { useDemoCycle } from './use-demo-cycle';
+import { useStoredChoice } from './use-stored-choice';
 
 export interface OrbCardData {
   id: string;
@@ -41,6 +43,8 @@ export interface OrbCardData {
   files: FileWithCode[];
 }
 
+type StyleVariant = 'css-modules' | 'tailwind';
+
 const SPECIAL_STATES = ['error', 'disabled'] as const satisfies readonly OrbState[];
 
 const MIC_ERROR_LABEL = {
@@ -48,99 +52,122 @@ const MIC_ERROR_LABEL = {
   unavailable: 'Mic unavailable',
 } as const;
 
-const MIC_ERROR_TITLE = {
+const MIC_ERROR_TEXT = {
   'permission-denied': 'Microphone permission was denied. Allow mic access in the browser and try again.',
   unavailable: 'Microphone is unavailable in this browser or context (use localhost or https).',
 } as const;
 
 const STATE_LABEL: Record<OrbState, string> = {
-  idle: 'idle',
-  connecting: 'connecting',
-  listening: 'listening',
-  thinking: 'thinking',
-  speaking: 'speaking',
-  error: 'error',
-  disabled: 'disabled',
+  idle: 'Idle',
+  connecting: 'Connecting',
+  listening: 'Listening',
+  thinking: 'Thinking',
+  speaking: 'Speaking',
+  error: 'Error',
+  disabled: 'Disabled',
 };
 
-const COST_HINT: Record<string, { label?: string; note: string }> = {
-  'Pure CSS': {
-    label: 'compositor only',
-    note: 'Animates on the compositor thread; the cheapest option, safe on any mobile device.',
-  },
-  Canvas: {
-    note: 'Redraws a 2D canvas every frame; moderate CPU cost, fine on most phones.',
-  },
-  'SVG filters': {
-    note: 'SVG filter effects rasterize on the CPU; can be heavy on low-end mobile.',
-  },
-  'Shader (canvas)': {
-    label: 'gpu',
-    note: 'Fragment shader running on the GPU; smooth but battery-hungry on mobile.',
-  },
-  'WebGL (R3F + GLSL)': {
-    label: 'gpu',
-    note: 'Full WebGL scene on the GPU; the heaviest option, use sparingly on mobile.',
-  },
-};
-
-const PROVIDERS: { value: PromptProvider; label: string }[] = [
-  { value: 'generic', label: 'Generic' },
-  { value: 'vapi', label: 'Vapi' },
-  { value: 'elevenlabs', label: 'ElevenLabs' },
-  { value: 'livekit', label: 'LiveKit' },
-  { value: 'openai-realtime', label: 'OpenAI Realtime' },
+const VARIANT_OPTIONS: { value: StyleVariant; label: string }[] = [
+  { value: 'css-modules', label: 'CSS Modules' },
+  { value: 'tailwind', label: 'Tailwind' },
 ];
 
-const stateButton = (s: OrbState, state: OrbState, setState: (next: OrbState) => void) => (
-  <button
-    key={s}
-    type="button"
-    onClick={() => setState(s)}
-    aria-pressed={state === s}
-    className={clsx(
-      'rounded px-2 py-1 text-xs transition-colors',
-      state === s ? 'bg-accent/15 text-accent-foreground' : 'text-muted hover:text-foreground',
-    )}
-  >
-    {STATE_LABEL[s]}
-  </button>
-);
+const DEFAULT_SPEED = 1;
+
+const pillButton = (active: boolean) =>
+  clsx(
+    'inline-flex min-h-10 items-center justify-center rounded px-3 text-xs font-medium transition-colors sm:min-h-7 sm:px-2.5',
+    active ? 'bg-accent/15 text-accent-foreground' : 'text-muted hover:text-foreground',
+  );
 
 const transportChip = (active: boolean) =>
   clsx(
-    'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors',
+    'inline-flex min-h-10 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors sm:min-h-8',
     active
       ? 'border-accent bg-accent/15 text-accent-foreground'
       : 'border-border bg-panel text-muted hover:text-foreground',
   );
 
+const SECONDARY_BUTTON =
+  'inline-flex min-h-10 items-center rounded-md border border-border bg-panel px-3 text-xs font-medium text-foreground transition-colors hover:border-accent hover:text-accent-foreground sm:min-h-8';
+
+const PILL_GROUP = 'flex w-fit flex-wrap items-center gap-0.5 rounded-md border border-border bg-panel p-0.5';
+
+const Group = ({
+  title,
+  action,
+  children,
+  className,
+  level = 'h3',
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  level?: 'h2' | 'h3';
+}) => {
+  const id = useId();
+  const Heading = level;
+  return (
+    <section aria-labelledby={id} className={clsx('flex flex-col gap-4', className)}>
+      <div className="flex min-h-8 items-center justify-between gap-3">
+        <Heading id={id} className="text-sm font-semibold text-foreground">
+          {title}
+        </Heading>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+};
+
+const Field = ({ label, value, children }: { label: string; value?: string; children: ReactNode }) => (
+  <div className="flex flex-col gap-1.5 text-xs">
+    <span className="text-muted">
+      {label}
+      {value && <span className="text-foreground"> · {value}</span>}
+    </span>
+    {children}
+  </div>
+);
+
+const tailwindComponentName = (file: FileWithCode | undefined, fallback: string): string =>
+  file?.code.match(/export const (\w+)/)?.[1] ?? fallback;
+
+const importPathOf = (file: FileWithCode): string =>
+  `@/${file.path.replace(/^src\//, '').replace(/\.tsx?$/, '')}`;
+
 export const OrbCard = ({
   orb,
   shared,
   adapters,
-  hideDetailsLink = false,
   hideHeader = false,
 }: {
   orb: OrbCardData;
   shared: FileWithCode[];
   adapters: AdapterFilesWithCode;
-  hideDetailsLink?: boolean;
   hideHeader?: boolean;
 }) => {
   const [state, setState] = useState<OrbState>('idle');
   const [mic, setMic] = useState(false);
-  const [speed, setSpeed] = useState(1);
+  const [speed, setSpeed] = useState(DEFAULT_SPEED);
   const [size, setSize] = useState(orb.defaultSize);
   const [colorFrom, setColorFrom] = useState(orb.defaultColorFrom);
   const [colorTo, setColorTo] = useState(orb.defaultColorTo);
   const [showCode, setShowCode] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
   const [cues, setCues] = useState(false);
-  const [provider, setProvider] = useState<PromptProvider>('generic');
+  const [variant, setVariant] = useState<StyleVariant>('css-modules');
+  const [provider, setProvider] = useStoredChoice<PromptProvider>(
+    PROVIDER_STORAGE_KEY,
+    PROVIDER_VALUES,
+    'generic',
+  );
   const { levelRef, error: micError } = useAudioLevel(mic);
   const [seenMicError, setSeenMicError] = useState<typeof micError>(null);
   const demo = useDemoCycle(setState);
+  const transportHelpId = useId();
+  const groupLevel = hideHeader ? 'h2' : 'h3';
 
   useOrbCues(state, { enabled: cues });
 
@@ -149,35 +176,55 @@ export const OrbCard = ({
     if (micError) setMic(false);
   }
 
-  const component = orb.name.replace(/\s+/g, '');
+  const hasTailwind = useMemo(() => orb.files.some((file) => file.variant === 'tailwind'), [orb.files]);
+  const activeVariant: StyleVariant = hasTailwind ? variant : 'css-modules';
+
+  const variantFiles = useMemo(
+    () =>
+      hasTailwind
+        ? orb.files.filter((file) => !file.variant || file.variant === activeVariant)
+        : orb.files,
+    [orb.files, hasTailwind, activeVariant],
+  );
+
+  const cssModuleFiles = useMemo(
+    () => orb.files.filter((file) => file.variant !== 'tailwind'),
+    [orb.files],
+  );
+
+  const baseComponent = orb.name.replace(/\s+/g, '');
+  const tailwindFile = activeVariant === 'tailwind' ? variantFiles.find((f) => f.lang === 'tsx') : undefined;
+  const component = tailwindFile ? tailwindComponentName(tailwindFile, baseComponent) : baseComponent;
+  const importPath = tailwindFile ? importPathOf(tailwindFile) : undefined;
 
   const usageFile = useMemo<FileWithCode>(
     () => ({
       label: 'Usage',
       path: 'usage.tsx',
       lang: 'tsx',
-      code: buildUsageSnippet(component, { state, size, speed, colorFrom, colorTo }),
+      code: buildUsageSnippet(component, { state, size, speed, colorFrom, colorTo }, importPath),
     }),
-    [component, state, size, speed, colorFrom, colorTo],
+    [component, importPath, state, size, speed, colorFrom, colorTo],
   );
 
-  const codeFiles = useMemo(() => [usageFile, ...orb.files], [usageFile, orb.files]);
+  const codeFiles = useMemo(() => [usageFile, ...variantFiles], [usageFile, variantFiles]);
 
   const aiPrompt = useMemo(
     () =>
       `${buildAiPrompt(
         orb.name,
         orb.dependencies,
-        orb.files,
+        variantFiles,
         shared,
         provider,
         provider === 'generic' ? undefined : adapters[provider],
+        component,
       )}
 
 Requested configuration (current playground values, render the orb with exactly these props):
 \`\`\`tsx
 ${usageFile.code}\`\`\``,
-    [orb.name, orb.dependencies, orb.files, shared, provider, adapters, usageFile.code],
+    [orb.name, orb.dependencies, variantFiles, shared, provider, adapters, component, usageFile.code],
   );
 
   const reactive = state === 'listening' || state === 'speaking';
@@ -212,39 +259,41 @@ ${usageFile.code}\`\`\``,
     });
   };
 
-  const costHint = COST_HINT[orb.tech];
   const presets = useMemo(() => presetsForOrb(orb.id), [orb.id]);
   const sizePresets = useMemo(() => sizePresetsForOrb(orb.defaultSize), [orb.defaultSize]);
+  const activePreset = findPreset(presets, colorFrom, colorTo);
+  const isDefaultColor =
+    colorFrom.toLowerCase() === orb.defaultColorFrom.toLowerCase() &&
+    colorTo.toLowerCase() === orb.defaultColorTo.toLowerCase();
+  const colorName = activePreset?.name ?? (isDefaultColor ? 'Default' : 'Custom');
+  const pristine = isDefaultColor && size === orb.defaultSize && speed === DEFAULT_SPEED;
+  const providerLabel = PROVIDERS.find((p) => p.value === provider)?.label ?? 'Generic';
 
   const applyPreset = (from: string, to: string) => {
     setColorFrom(from);
     setColorTo(to);
   };
 
+  const reset = () => {
+    setColorFrom(orb.defaultColorFrom);
+    setColorTo(orb.defaultColorTo);
+    setSize(orb.defaultSize);
+    setSpeed(DEFAULT_SPEED);
+  };
+
   return (
     <article
       id={orb.id}
-      className="flex scroll-mt-20 flex-col gap-5 rounded-2xl border border-border bg-panel/60 p-5"
+      className="flex scroll-mt-20 flex-col gap-6 rounded-2xl border border-border bg-panel/60 p-5"
     >
       {!hideHeader && (
         <header className="flex flex-col gap-2">
-          <div className="flex items-start justify-between gap-3">
-            <h2 className="min-w-0 text-lg font-semibold">{orb.name}</h2>
-            {!hideDetailsLink && (
-              <Link
-                href={`/orbs/${orb.id}`}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-panel px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-accent hover:text-accent-foreground"
-              >
-                Details
-                <ArrowRightIcon />
-              </Link>
-            )}
-          </div>
+          <h2 className="min-w-0 text-lg font-semibold">{orb.name}</h2>
           <p className="text-sm text-muted">{orb.tagline}</p>
         </header>
       )}
 
-      <div className="flex flex-col gap-2.5">
+      <Group title="Preview" level={groupLevel}>
         <div className="grid min-h-64 place-items-center rounded-xl border border-border bg-[radial-gradient(circle_at_50%_30%,var(--orb-stage-from),var(--orb-stage-to))]">
           <OrbPreview
             id={orb.id}
@@ -257,196 +306,220 @@ ${usageFile.code}\`\`\``,
             label={orb.name}
           />
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            type="button"
-            onClick={demo.toggle}
-            aria-pressed={demo.running}
-            title="Simulate a voice conversation: cycles idle, connecting, listening, thinking and speaking. Click any state or the mic to interrupt."
-            className={transportChip(demo.running)}
-          >
-            {demo.running ? <PauseIcon /> : <PlayIcon />}
-            Demo
-          </button>
-          <button
-            type="button"
-            onClick={toggleMic}
-            aria-pressed={mic && !micError}
-            disabled={state === 'disabled'}
-            title={
-              micError
-                ? MIC_ERROR_TITLE[micError]
-                : 'React to your microphone in listening/speaking states'
-            }
-            className={clsx(
-              'disabled:cursor-not-allowed disabled:opacity-50',
-              micError
-                ? 'inline-flex items-center gap-1.5 rounded-md border border-foreground/40 bg-panel px-2.5 py-1 text-xs font-medium text-foreground transition-colors'
-                : transportChip(mic),
-            )}
-          >
-            {micError ? (
-              <>
-                <MicOffIcon />
-                {MIC_ERROR_LABEL[micError]}
-              </>
-            ) : mic ? (
-              <>
-                <MicIcon />
-                Mic on
-              </>
-            ) : (
-              <>
-                <MicOffIcon />
-                Mic off
-              </>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setCues((prev) => !prev)}
-            aria-pressed={cues}
-            title="Play subtle sound cues (and haptics on supported devices) on state changes"
-            className={transportChip(cues)}
-          >
-            {cues ? <SoundIcon /> : <SoundOffIcon />}
-            {cues ? 'Cues on' : 'Cues off'}
-          </button>
-          <OrbStatus state={state} className="ml-auto text-[11px] text-muted" />
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-4 text-xs">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-muted">State</span>
+        <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
-            <div
-              role="group"
-              aria-label="Conversation states"
-              className="flex w-fit flex-wrap items-center gap-0.5 rounded-md border border-border bg-panel p-0.5"
+            <button
+              type="button"
+              onClick={demo.toggle}
+              aria-pressed={demo.running}
+              aria-describedby={transportHelpId}
+              className={transportChip(demo.running)}
             >
-              {ORB_STATES.map((s) => stateButton(s, state, selectState))}
-            </div>
-            <div
-              role="group"
-              aria-label="Special states"
-              className="flex w-fit flex-wrap items-center gap-0.5 rounded-md border border-border bg-panel p-0.5"
+              {demo.running ? <PauseIcon /> : <PlayIcon />}
+              {demo.running ? 'Pause demo' : 'Play demo'}
+            </button>
+            <button
+              type="button"
+              onClick={toggleMic}
+              aria-pressed={mic && !micError}
+              aria-describedby={transportHelpId}
+              disabled={state === 'disabled'}
+              className={clsx(
+                'disabled:cursor-not-allowed disabled:opacity-50',
+                micError
+                  ? 'inline-flex min-h-10 items-center gap-1.5 rounded-md border border-foreground/40 bg-panel px-3 text-xs font-medium text-foreground transition-colors sm:min-h-8'
+                  : transportChip(mic),
+              )}
             >
-              {SPECIAL_STATES.map((s) => stateButton(s, state, selectState))}
-            </div>
+              {micError ? <MicOffIcon /> : mic ? <MicIcon /> : <MicOffIcon />}
+              {micError ? MIC_ERROR_LABEL[micError] : mic ? 'Mic on' : 'Mic off'}
+            </button>
+            <OrbStatus state={state} className="ml-auto text-xs text-muted" />
           </div>
+          <p id={transportHelpId} className="text-xs text-muted">
+            {micError
+              ? MIC_ERROR_TEXT[micError]
+              : 'The demo cycles the five states. The mic makes the orb react to your voice while listening or speaking.'}
+          </p>
         </div>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-muted">Speed</span>
-          <SegmentedControl
-            label="Speed"
-            options={SPEED_PRESETS}
-            value={speed}
-            onChange={setSpeed}
-            format={(v) => `${v}×`}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-muted">Size</span>
-          <SegmentedControl
-            label="Size"
-            options={sizePresets}
-            value={size}
-            onChange={setSize}
-            format={(v) => `${v}px`}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-muted">Color</span>
+        <Field label="State">
+          <div role="group" aria-label="Conversation states" className={PILL_GROUP}>
+            {ORB_STATES.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => selectState(s)}
+                aria-pressed={state === s}
+                className={pillButton(state === s)}
+              >
+                {STATE_LABEL[s]}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Disclosure label="Advanced">
+          <Field label="Optional states">
+            <div role="group" aria-label="Optional states" className={PILL_GROUP}>
+              {SPECIAL_STATES.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => selectState(s)}
+                  aria-pressed={state === s}
+                  className={pillButton(state === s)}
+                >
+                  {STATE_LABEL[s]}
+                </button>
+              ))}
+            </div>
+          </Field>
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCues((prev) => !prev)}
+              aria-pressed={cues}
+              className={transportChip(cues)}
+            >
+              {cues ? <SoundIcon /> : <SoundOffIcon />}
+              {cues ? 'Cues on' : 'Cues off'}
+            </button>
+            <span className="text-xs text-muted">
+              Subtle sounds (and haptics where supported) on state changes.
+            </span>
+          </div>
+        </Disclosure>
+      </Group>
+
+      <div className="grid gap-6 border-t border-border pt-6 md:grid-cols-2 md:gap-8">
+        <Group
+          title="Customize"
+          level={groupLevel}
+          action={
+            <button type="button" onClick={reset} disabled={pristine} className={clsx(SECONDARY_BUTTON, 'disabled:cursor-not-allowed disabled:opacity-50')}>
+              Reset
+            </button>
+          }
+        >
+          <Field label="Color" value={colorName}>
             <ColorPresetSwatches
               presets={presets}
               colorFrom={colorFrom}
               colorTo={colorTo}
               onSelect={applyPreset}
             />
-            <span aria-hidden="true" className="h-4 w-px bg-border" />
-            <ColorField label="From" value={colorFrom} onChange={setColorFrom} />
-            <ColorField label="To" value={colorTo} onChange={setColorTo} />
-          </div>
-        </div>
-      </div>
+            <Disclosure label="Custom colors">
+              <div className="flex flex-wrap items-center gap-4">
+                <ColorField label="From" value={colorFrom} onChange={setColorFrom} />
+                <ColorField label="To" value={colorTo} onChange={setColorTo} />
+              </div>
+            </Disclosure>
+          </Field>
+          <Field label="Size" value={`${size}px`}>
+            <SegmentedControl
+              label="Size"
+              options={sizePresets}
+              value={size}
+              onChange={setSize}
+              defaultValue={orb.defaultSize}
+            />
+          </Field>
+          <Field label="Speed" value={`${speed}×`}>
+            <SegmentedControl
+              label="Speed"
+              options={SPEED_PRESETS}
+              value={speed}
+              onChange={setSpeed}
+              defaultValue={DEFAULT_SPEED}
+            />
+          </Field>
+          <p className="text-xs text-muted">A dot marks each default.</p>
+        </Group>
 
-      <footer className="flex flex-col gap-2.5 border-t border-border pt-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <CopyButton value={aiPrompt} label="Copy AI prompt" variant="solid" />
-          <Select
-            value={provider}
-            onValueChange={(v) => setProvider(v as PromptProvider)}
-            options={PROVIDERS}
-            ariaLabel="AI prompt provider"
-          />
-          <button
-            type="button"
-            onClick={() => setShowPrompt((v) => !v)}
-            className="rounded-md border border-border bg-panel px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-accent hover:text-accent-foreground"
-          >
-            {showPrompt ? 'Hide prompt' : 'View prompt'}
-          </button>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowCode((v) => !v)}
-            className="rounded-md border border-border bg-panel px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-accent hover:text-accent-foreground"
-          >
-            {showCode ? 'Hide code' : 'View code'}
-          </button>
-          <OpenInStackblitz
-            id={orb.id}
-            name={orb.name}
-            dependencies={orb.dependencies}
-            files={orb.files}
-            shared={shared}
-            config={{ state, size, speed, colorFrom, colorTo }}
-          />
-        </div>
-        {orb.dependencies.length > 0 && <InstallBlock dependencies={orb.dependencies} />}
-        {showPrompt && (
-          <div
-            className="relative rounded-lg border border-code-border bg-code"
-            style={{ boxShadow: 'var(--code-shadow)' }}
-          >
-            <div className="absolute top-2 right-2 z-10">
-              <CopyButton value={aiPrompt} label="Copy" />
+        <Group title="Get the code" level={groupLevel}>
+          {hasTailwind && (
+            <Field label="Styling">
+              <div role="group" aria-label="Styling variant" className={PILL_GROUP}>
+                {VARIANT_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setVariant(option.value)}
+                    aria-pressed={activeVariant === option.value}
+                    className={pillButton(activeVariant === option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </Field>
+          )}
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <CopyButton value={aiPrompt} label="Copy AI prompt" variant="solid" />
+              <button
+                type="button"
+                onClick={() => setShowCode((v) => !v)}
+                aria-expanded={showCode}
+                className={SECONDARY_BUTTON}
+              >
+                {showCode ? 'Hide code' : 'View code'}
+              </button>
             </div>
-            <pre className="max-h-80 overflow-auto whitespace-pre-wrap p-4 font-mono text-xs leading-relaxed text-code-muted">
-              {aiPrompt}
-            </pre>
+            <p className="text-xs text-muted">
+              The prompt bundles every file plus your current settings, set up for{' '}
+              <span className="text-foreground">{providerLabel}</span>.
+            </p>
           </div>
-        )}
-        {showCode && <CodeBlock files={codeFiles} />}
-      </footer>
-
-      <div className="mt-auto flex flex-wrap items-center gap-1.5">
-        <span
-          title={costHint?.note}
-          className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted"
-        >
-          {orb.tech}
-        </span>
-        {costHint?.label && (
-          <span
-            title={costHint.note}
-            className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted"
-          >
-            {costHint.label}
-          </span>
-        )}
-        {orb.dependencies.length === 0 && (
-          <span
-            title="No external dependencies; copy the files and it just works."
-            className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted"
-          >
-            Zero deps
-          </span>
-        )}
+          {orb.dependencies.length > 0 ? (
+            <Field label="Install">
+              <InstallBlock dependencies={orb.dependencies} />
+            </Field>
+          ) : (
+            <p className="text-xs text-muted">Zero dependencies: copy the files and it just works.</p>
+          )}
+          <Disclosure label="More">
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={provider}
+                onValueChange={(v) => setProvider(v as PromptProvider)}
+                options={PROVIDERS}
+                ariaLabel="AI prompt provider"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPrompt((v) => !v)}
+                aria-expanded={showPrompt}
+                className={SECONDARY_BUTTON}
+              >
+                {showPrompt ? 'Hide prompt' : 'View prompt'}
+              </button>
+              <OpenInStackblitz
+                id={orb.id}
+                name={orb.name}
+                dependencies={orb.dependencies}
+                files={cssModuleFiles}
+                shared={shared}
+                config={{ state, size, speed, colorFrom, colorTo }}
+              />
+            </div>
+          </Disclosure>
+        </Group>
       </div>
+
+      {showPrompt && (
+        <div
+          className="relative rounded-lg border border-code-border bg-code"
+          style={{ boxShadow: 'var(--code-shadow)' }}
+        >
+          <div className="absolute top-2 right-2 z-10">
+            <CopyButton value={aiPrompt} label="Copy" />
+          </div>
+          <pre className="max-h-80 overflow-auto whitespace-pre-wrap p-4 font-mono text-xs leading-relaxed text-code-muted">
+            {aiPrompt}
+          </pre>
+        </div>
+      )}
+      {showCode && <CodeBlock key={activeVariant} files={codeFiles} />}
     </article>
   );
 };

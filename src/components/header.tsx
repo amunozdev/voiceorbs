@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { GitHubLink } from '@/components/github-link';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { HeaderNav } from '@/components/header-nav';
 
 export const Header = () => (
   <header className="sticky top-0 z-40 border-b border-border bg-background/70 backdrop-blur">
@@ -15,9 +16,12 @@ export const Header = () => (
         />
         <span className="truncate">VoiceOrbs</span>
       </Link>
-      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
-        <GitHubLink />
-        <ThemeToggle />
+      <div className="flex min-w-0 items-center gap-1 sm:gap-4">
+        <HeaderNav />
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
+          <GitHubLink />
+          <ThemeToggle />
+        </div>
       </div>
     </div>
   </header>

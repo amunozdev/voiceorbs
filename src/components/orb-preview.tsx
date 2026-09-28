@@ -32,39 +32,57 @@ const MAP: Record<string, ComponentType<OrbProps>> = {
   'minimal-orb': MinimalOrb,
 };
 
+const DeferredLoading = () => (
+  <div
+    aria-hidden="true"
+    className="absolute inset-[10%] rounded-full bg-border/60 motion-safe:animate-pulse"
+  />
+);
+
 const DEFERRED_MAP: Record<string, ComponentType<OrbProps>> = {
   'plasma-orb': dynamic(() => import('@/registry/orbe/plasma-orb/plasma-orb').then((m) => m.PlasmaOrb), {
     ssr: false,
+    loading: DeferredLoading,
   }),
   'nebula-orb': dynamic(() => import('@/registry/orbe/nebula-orb/nebula-orb').then((m) => m.NebulaOrb), {
     ssr: false,
+    loading: DeferredLoading,
   }),
   'radiance-orb': dynamic(() => import('@/registry/orbe/radiance-orb/radiance-orb').then((m) => m.RadianceOrb), {
     ssr: false,
+    loading: DeferredLoading,
   }),
   'dither-orb': dynamic(() => import('@/registry/orbe/dither-orb/dither-orb').then((m) => m.DitherOrb), {
     ssr: false,
+    loading: DeferredLoading,
   }),
   'dot-orbit': dynamic(() => import('@/registry/orbe/dot-orbit/dot-orbit').then((m) => m.DotOrbit), {
     ssr: false,
+    loading: DeferredLoading,
   }),
   'grain-orb': dynamic(() => import('@/registry/orbe/grain-orb/grain-orb').then((m) => m.GrainOrb), {
     ssr: false,
+    loading: DeferredLoading,
   }),
   'mercury-orb': dynamic(() => import('@/registry/orbe/mercury-orb/mercury-orb').then((m) => m.MercuryOrb), {
     ssr: false,
+    loading: DeferredLoading,
   }),
   'siri-sheet': dynamic(() => import('@/registry/orbe/siri-sheet/siri-sheet').then((m) => m.SiriSheet), {
     ssr: false,
+    loading: DeferredLoading,
   }),
   'duotone-flow': dynamic(() => import('@/registry/orbe/duotone-flow/duotone-flow').then((m) => m.DuotoneFlow), {
     ssr: false,
+    loading: DeferredLoading,
   }),
   'aura-field': dynamic(() => import('@/registry/orbe/aura-field/aura-field').then((m) => m.AuraField), {
     ssr: false,
+    loading: DeferredLoading,
   }),
   'siri-wave-line': dynamic(() => import('@/registry/orbe/siri-wave-line/siri-wave-line').then((m) => m.SiriWaveLine), {
     ssr: false,
+    loading: DeferredLoading,
   }),
 };
 
@@ -93,17 +111,14 @@ const DeferredOrb = ({ orb: Orb, ...props }: OrbProps & { orb: ComponentType<Orb
       {near ? (
         <Orb {...props} />
       ) : (
-        <div
-          role="img"
-          aria-label={label}
-          style={{
-            position: 'absolute',
-            inset: '10%',
-            borderRadius: '50%',
-            background: `radial-gradient(circle at 36% 30%, ${colorTo} 0%, ${colorFrom} 62%, transparent 100%)`,
-            opacity: 0.5,
-          }}
-        />
+        <div role="img" aria-label={label} aria-busy="true" className="absolute inset-[10%] opacity-50">
+          <div
+            className="size-full rounded-full motion-safe:animate-pulse"
+            style={{
+              background: `radial-gradient(circle at 36% 30%, ${colorTo} 0%, ${colorFrom} 62%, transparent 100%)`,
+            }}
+          />
+        </div>
       )}
     </div>
   );

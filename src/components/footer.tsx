@@ -8,12 +8,6 @@ const X_URL = 'https://x.com/alexmunoz1_';
 
 const LINK_CLASS = 'text-muted transition-colors hover:text-foreground';
 
-const XIcon = () => (
-  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-    <path d="M18.9 1.15h3.68l-8.04 9.19L24 22.85h-7.41l-5.8-7.58-6.64 7.58H.46l8.6-9.83L0 1.15h7.6l5.24 6.93 6.06-6.93zm-1.29 19.5h2.04L6.48 3.24H4.29l13.32 17.41z" />
-  </svg>
-);
-
 export const Footer = () => (
   <footer className="mt-auto border-t border-border">
     <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-10">
@@ -66,16 +60,6 @@ export const Footer = () => (
         </a>
         <a href="/llms.txt" className={LINK_CLASS}>
           llms.txt
-        </a>
-        <a
-          href={X_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Follow the creator on X"
-          className={`inline-flex items-center ${LINK_CLASS}`}
-        >
-          <XIcon />
-          <span className="sr-only">X (Twitter)</span>
         </a>
       </nav>
     </div>

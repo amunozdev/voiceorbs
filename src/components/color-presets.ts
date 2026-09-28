@@ -6,27 +6,33 @@ export interface GradientPreset {
 
 export const BASE_PRESETS: GradientPreset[] = [
   { name: 'Iris', from: '#818cf8', to: '#22d3ee' },
-  { name: 'Orquídea', from: '#8b5cf6', to: '#d946ef' },
+  { name: 'Orchid', from: '#8b5cf6', to: '#d946ef' },
   { name: 'Aurora', from: '#22d3ee', to: '#34d399' },
-  { name: 'Atardecer', from: '#fbbf24', to: '#f43f5e' },
-  { name: 'Cósmico', from: '#fc466b', to: '#3f5efb' },
-  { name: 'Neón', from: '#22d3ee', to: '#d946ef' },
+  { name: 'Sunset', from: '#fbbf24', to: '#f43f5e' },
+  { name: 'Cosmic', from: '#fc466b', to: '#3f5efb' },
+  { name: 'Neon', from: '#22d3ee', to: '#d946ef' },
   { name: 'Metal', from: '#94a3b8', to: '#e2e8f0' },
 ];
 
 const ORB_PRESETS: Record<string, GradientPreset[]> = {
-  'galaxy-orb': [{ name: 'Nebulosa', from: '#4f46e5', to: '#ec4899' }],
-  'nebula-orb': [{ name: 'Nebulosa', from: '#4f46e5', to: '#ec4899' }],
-  'iridescent-flow': [{ name: 'Iridiscente', from: '#22d3ee', to: '#a855f7' }],
+  'galaxy-orb': [{ name: 'Nebula', from: '#4f46e5', to: '#ec4899' }],
+  'nebula-orb': [{ name: 'Nebula', from: '#4f46e5', to: '#ec4899' }],
+  'iridescent-flow': [{ name: 'Iridescent', from: '#22d3ee', to: '#a855f7' }],
   'plasma-orb': [{ name: 'Magma', from: '#f43f5e', to: '#fb923c' }],
   'aurora-orb': [{ name: 'Boreal', from: '#2dd4bf', to: '#4ade80' }],
-  'mercury-orb': [{ name: 'Cromo dorado', from: '#b45309', to: '#fde68a' }],
+  'mercury-orb': [{ name: 'Gold chrome', from: '#b45309', to: '#fde68a' }],
 };
 
 export const presetsForOrb = (id: string): GradientPreset[] => [
   ...BASE_PRESETS,
   ...(ORB_PRESETS[id] ?? []),
 ];
+
+export const findPreset = (
+  presets: GradientPreset[],
+  from: string,
+  to: string,
+): GradientPreset | undefined => presets.find((preset) => isSamePreset(preset, from, to));
 
 export const isSamePreset = (
   preset: GradientPreset,

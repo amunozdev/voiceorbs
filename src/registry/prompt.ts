@@ -49,9 +49,10 @@ export interface UsageConfig {
 export const buildUsageSnippet = (
   componentName: string,
   { state, size, speed, colorFrom, colorTo }: UsageConfig,
+  importPath?: string,
 ): string => {
   const dir = componentName.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-  return `import { ${componentName} } from '@/registry/orbe/${dir}/${dir}';
+  return `import { ${componentName} } from '${importPath ?? `@/registry/orbe/${dir}/${dir}`}';
 
 export const Assistant = () => (
   <${componentName}
@@ -72,12 +73,13 @@ export const buildAiPrompt = (
   shared: FileWithCode[],
   provider: PromptProvider = 'generic',
   adapter?: FileWithCode,
+  componentName?: string,
 ): string => {
   const deps = dependencies.length
     ? `First install: \`${dependencies.join(' ')}\`.`
     : 'No extra dependencies are required.';
   const block = (f: FileWithCode) => `\n${f.label}\n\`\`\`${f.lang}\n${f.code}\`\`\`\n`;
-  const component = name.replace(/\s+/g, '');
+  const component = componentName ?? name.replace(/\s+/g, '');
   const componentPath = files[0]
     ? files[0].path.replace(/^src\//, '').replace(/\.tsx?$/, '')
     : 'registry/orbe';

@@ -7,6 +7,8 @@ export interface Recipe {
   code: string;
 }
 
+export const START_RECIPE_ID = 'microphone';
+
 export const recipes: Recipe[] = [
   {
     id: 'microphone',

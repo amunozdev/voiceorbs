@@ -53,7 +53,7 @@ export const Select = ({
   <SelectPrimitive.Root value={value} onValueChange={onValueChange}>
     <SelectPrimitive.Trigger
       aria-label={ariaLabel}
-      className="inline-flex items-center gap-2 rounded-md border border-border bg-panel px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-accent focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 data-[state=open]:border-accent"
+      className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border bg-panel px-2.5 text-xs sm:min-h-8 font-medium text-foreground transition-colors hover:border-accent focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 data-[state=open]:border-accent"
     >
       <SelectPrimitive.Value />
       <SelectPrimitive.Icon className="text-muted">
@@ -71,7 +71,7 @@ export const Select = ({
             <SelectPrimitive.Item
               key={option.value}
               value={option.value}
-              className="flex cursor-pointer items-center justify-between gap-4 rounded px-2 py-1.5 text-xs text-foreground outline-none select-none data-[highlighted]:bg-accent/15 data-[highlighted]:text-accent-foreground data-[state=checked]:text-accent-foreground"
+              className="flex cursor-pointer items-center justify-between gap-4 rounded px-2 py-2.5 text-xs text-foreground outline-none sm:py-1.5 select-none data-[highlighted]:bg-accent/15 data-[highlighted]:text-accent-foreground data-[state=checked]:text-accent-foreground"
             >
               <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
               <SelectPrimitive.ItemIndicator>

@@ -18,6 +18,26 @@ const DEMO_STEPS: DemoStep[] = [
 
 const jitter = (ms: number): number => Math.round(ms * (0.85 + Math.random() * 0.3));
 
+export const useStateCycle = (
+  active: boolean,
+  onState: (next: OrbState) => void,
+  { randomStart = false }: { randomStart?: boolean } = {},
+): void => {
+  useEffect(() => {
+    if (!active) return;
+    let timer = 0;
+    let index = randomStart ? Math.floor(Math.random() * DEMO_STEPS.length) : 0;
+    const advance = () => {
+      const step = DEMO_STEPS[index % DEMO_STEPS.length];
+      index += 1;
+      onState(step.state);
+      timer = window.setTimeout(advance, jitter(step.duration));
+    };
+    timer = window.setTimeout(advance, randomStart ? jitter(400) : 0);
+    return () => window.clearTimeout(timer);
+  }, [active, onState, randomStart]);
+};
+
 export interface DemoCycle {
   running: boolean;
   toggle: () => void;
@@ -27,19 +47,7 @@ export interface DemoCycle {
 export const useDemoCycle = (onState: (next: OrbState) => void): DemoCycle => {
   const [running, setRunning] = useState(false);
 
-  useEffect(() => {
-    if (!running) return;
-    let timer = 0;
-    let index = 0;
-    const advance = () => {
-      const step = DEMO_STEPS[index % DEMO_STEPS.length];
-      index += 1;
-      onState(step.state);
-      timer = window.setTimeout(advance, jitter(step.duration));
-    };
-    timer = window.setTimeout(advance, 0);
-    return () => window.clearTimeout(timer);
-  }, [running, onState]);
+  useStateCycle(running, onState);
 
   const toggle = () => setRunning((prev) => !prev);
   const stop = () => setRunning(false);

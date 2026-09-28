@@ -10,13 +10,13 @@ export const SegmentedControl = ({
   options,
   value,
   onChange,
-  format,
+  defaultValue,
 }: {
   label: string;
   options: SegmentOption[];
   value: number;
   onChange: (value: number) => void;
-  format?: (value: number) => string;
+  defaultValue?: number;
 }) => (
   <div
     role="group"
@@ -25,19 +25,28 @@ export const SegmentedControl = ({
   >
     {options.map((option) => {
       const active = value === option.value;
+      const isDefault = option.value === defaultValue;
       return (
         <button
           key={option.label}
           type="button"
           onClick={() => onChange(option.value)}
           aria-pressed={active}
-          title={format ? format(option.value) : undefined}
           className={clsx(
-            'rounded px-2 py-1 text-xs font-medium transition-colors',
+            'relative inline-flex min-h-10 min-w-11 items-center justify-center rounded px-3 text-xs font-medium transition-colors sm:min-h-7 sm:min-w-0 sm:px-2.5',
             active ? 'bg-accent/15 text-accent-foreground' : 'text-muted hover:text-foreground',
           )}
         >
           {option.label}
+          {isDefault && (
+            <>
+              <span
+                aria-hidden="true"
+                className="absolute top-1 right-1 size-1 rounded-full bg-current opacity-70"
+              />
+              <span className="sr-only"> (default)</span>
+            </>
+          )}
         </button>
       );
     })}

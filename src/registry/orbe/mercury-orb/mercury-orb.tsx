@@ -1,48 +1,34 @@
 'use client';
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LiquidMetal } from '@paper-design/shaders-react';
 import {
   approach,
+  blendEnergy,
+  blendStates,
+  clamp01,
   ERROR_COLOR_FROM,
   ERROR_COLOR_TO,
   hexToRgb,
   orbVars,
-  stateEnergy,
   type OrbProps,
   type OrbState,
 } from '../../lib/orb-state';
-import { observeActivity } from '../../lib/use-in-view';
+import { mixHex, mixRgb, rgbToHex, shadeHex, tintHex, type Rgb } from '../../lib/orb-color';
+import { useOrbAnimator, type OrbFrame } from '../../lib/use-orb-animator';
+import { useReducedMotion } from '../../lib/use-reduced-motion';
 import { useWebGLSupport } from '../../lib/use-webgl-support';
 
-const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+type ShaderUniforms = Record<string, number | number[]>;
 
-const subscribeReducedMotion = (onChange: () => void) => {
-  const mq = window.matchMedia(REDUCED_MOTION_QUERY);
-  mq.addEventListener('change', onChange);
-  return () => mq.removeEventListener('change', onChange);
-};
+interface PaperMount {
+  setUniforms: (uniforms: ShaderUniforms) => void;
+  setFrame: (frame: number) => void;
+}
 
-const useReducedMotion = () =>
-  useSyncExternalStore(
-    subscribeReducedMotion,
-    () => window.matchMedia(REDUCED_MOTION_QUERY).matches,
-    () => false,
-  );
-
-const mixHex = (a: string, b: string, t: number): string => {
-  const [ar, ag, ab] = hexToRgb(a);
-  const [br, bg, bb] = hexToRgb(b);
-  const channel = (x: number, y: number) =>
-    Math.round(x + (y - x) * t)
-      .toString(16)
-      .padStart(2, '0');
-  return `#${channel(ar, br)}${channel(ag, bg)}${channel(ab, bb)}`;
-};
-
-const shade = (hex: string, t: number) => mixHex(hex, '#000000', t);
-const tint = (hex: string, t: number) => mixHex(hex, '#ffffff', t);
+interface PaperHost {
+  paperShaderMount?: PaperMount;
+}
 
 const GL_ATTRIBUTES: WebGLContextAttributes = {
   antialias: true,
@@ -50,98 +36,48 @@ const GL_ATTRIBUTES: WebGLContextAttributes = {
 };
 
 const BASE_FRAME = 6000;
-const PUSH_INTERVAL_MS = 66;
-const MAX_DT = 0.1;
-const ENERGY_RATE = 7.5;
-const MOTION_RATE = 6;
-const SPEED_RATE = 5;
-const ERROR_RATE = 6;
 const STATIC_PHASE = 0.9;
 const STRIPE_ANGLE = 70;
+const MAX_PIXEL_RATIO = 2;
+const REPETITION_RATE = 2.5;
+const TAU = Math.PI * 2;
 
-const speedFor = (s: OrbState) =>
-  s === 'error'
-    ? 1.7
-    : s === 'listening'
-      ? 1.45
-      : s === 'speaking'
-        ? 1.15
-        : s === 'thinking'
-          ? 0.85
-          : s === 'connecting'
-            ? 0.5
-            : 0.32;
-
-interface RippleTarget {
+type MercuryTune = {
+  flow: number;
+  repetition: number;
   distortion: number;
   contour: number;
-  repetition: number;
   softness: number;
-}
-
-const rippleFor = (s: OrbState, energy: number): RippleTarget => {
-  switch (s) {
-    case 'listening':
-    case 'speaking':
-      return {
-        distortion: Math.min(1, 0.12 + energy * 0.5),
-        contour: Math.min(1, 0.45 + energy * 0.5),
-        repetition: 2.6 + energy * 2.4,
-        softness: 0.14,
-      };
-    case 'thinking':
-      return {
-        distortion: 0.3,
-        contour: Math.min(1, 0.55 + energy * 0.25),
-        repetition: 3.4,
-        softness: 0.22,
-      };
-    case 'connecting':
-      return {
-        distortion: 0.1 + energy * 0.3,
-        contour: 0.35 + energy * 0.4,
-        repetition: 2.2,
-        softness: 0.3,
-      };
-    case 'error':
-      return { distortion: 0.65, contour: 0.9, repetition: 4.2, softness: 0.08 };
-    case 'disabled':
-      return { distortion: 0.04, contour: 0.25, repetition: 2, softness: 0.4 };
-    default:
-      return { distortion: 0.08, contour: 0.42, repetition: 2.4, softness: 0.26 };
-  }
+  outer: number;
+  inner: number;
+  beat: number;
+  beatRate: number;
+  error: number;
 };
 
-const shaderSpeedFor = (s: OrbState, multiplier: number) =>
-  s === 'disabled' ? 0 : speedFor(s) * multiplier;
+const TUNE: Record<OrbState, MercuryTune> = {
+  idle: { flow: 0.32, repetition: 2.4, distortion: 0.08, contour: 0.42, softness: 0.26, outer: 0.25, inner: 0.2, beat: 0, beatRate: 0.3, error: 0 },
+  connecting: { flow: 0.4, repetition: 2.2, distortion: 0.1, contour: 0.36, softness: 0.3, outer: 0.1, inner: 0.1, beat: 0.6, beatRate: 0.28, error: 0 },
+  listening: { flow: 0.75, repetition: 2.6, distortion: 0.1, contour: 0.48, softness: 0.16, outer: 1, inner: 0.2, beat: 0, beatRate: 0.3, error: 0 },
+  thinking: { flow: 0.6, repetition: 3, distortion: 0.22, contour: 0.55, softness: 0.22, outer: 0.1, inner: 0.1, beat: 1, beatRate: 0.55, error: 0 },
+  speaking: { flow: 1.15, repetition: 2.8, distortion: 0.16, contour: 0.52, softness: 0.14, outer: 0.3, inner: 1, beat: 0, beatRate: 0.3, error: 0 },
+  error: { flow: 1.6, repetition: 3.6, distortion: 0.55, contour: 0.9, softness: 0.08, outer: 0.2, inner: 0.2, beat: 0, beatRate: 0.3, error: 1 },
+  disabled: { flow: 0, repetition: 2, distortion: 0.04, contour: 0.25, softness: 0.4, outer: 0, inner: 0, beat: 0, beatRate: 0.3, error: 0 },
+};
 
-interface OrbMotionValues {
-  energy: number;
-  distortion: number;
-  contour: number;
-  repetition: number;
-  softness: number;
-  shaderSpeed: number;
-  errorMix: number;
-}
+const toShaderColor = ([r, g, b]: Rgb): number[] => [r / 255, g / 255, b / 255, 1];
 
-const motionSeed = (s: OrbState, multiplier: number): OrbMotionValues => ({
-  energy: 0,
-  ...rippleFor(s, 0),
-  shaderSpeed: shaderSpeedFor(s, multiplier),
-  errorMix: s === 'error' ? 1 : 0,
-});
-
-const quantize = (value: number, steps: number) => Math.round(value * steps) / steps;
-
-const sameMotion = (a: OrbMotionValues, b: OrbMotionValues) =>
-  a.energy === b.energy &&
-  a.distortion === b.distortion &&
-  a.contour === b.contour &&
-  a.repetition === b.repetition &&
-  a.softness === b.softness &&
-  a.shaderSpeed === b.shaderSpeed &&
-  a.errorMix === b.errorMix;
+const liveColors = (colorFrom: string, colorTo: string, errorMix: number) => {
+  const from = mixRgb(hexToRgb(colorFrom), hexToRgb(ERROR_COLOR_FROM), errorMix);
+  const to = mixRgb(hexToRgb(colorTo), hexToRgb(ERROR_COLOR_TO), errorMix);
+  const core = rgbToHex(mixRgb(from, to, 0.5));
+  return {
+    from: rgbToHex(from),
+    to: rgbToHex(to),
+    back: shadeHex(core, 0.72),
+    tint: tintHex(core, 0.2),
+  };
+};
 
 export const MercuryOrb = ({
   state = 'idle',
@@ -156,13 +92,16 @@ export const MercuryOrb = ({
 }: OrbProps) => {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const sphereRef = useRef<HTMLDivElement>(null);
-  const stateRef = useRef(state);
-  const speedRef = useRef(speed);
+  const shaderRef = useRef<PaperHost | null>(null);
+  const clockRef = useRef({ phase: 0, shader: 0, beat: 0, repetition: TUNE[state].repetition, colors: '' });
   const reduced = useReducedMotion();
   const webgl = useWebGLSupport();
   const showShader = webgl === true;
-  const [motion, setMotion] = useState<OrbMotionValues>(() => motionSeed(state, speed));
-  const accRef = useRef<OrbMotionValues | null>(null);
+  const [seed] = useState(() => {
+    const tune = TUNE[state];
+    const colors = liveColors(colorFrom, colorTo, tune.error);
+    return { ...tune, ...colors };
+  });
 
   const setRootRef = (node: HTMLDivElement | null) => {
     rootRef.current = node;
@@ -173,91 +112,53 @@ export const MercuryOrb = ({
     }
   };
 
-  useEffect(() => {
-    stateRef.current = state;
-    speedRef.current = speed;
-  });
+  const bindShader = useCallback((node: PaperHost | null) => {
+    shaderRef.current = node;
+  }, []);
 
-  useEffect(() => {
-    if (reduced) return;
+  const onFrame = (frame: OrbFrame) => {
     const root = rootRef.current;
     if (!root) return;
-    if (accRef.current === null) {
-      accRef.current = motionSeed(stateRef.current, speedRef.current);
+    const clock = clockRef.current;
+    const step = Math.max(0, frame.phase - clock.phase);
+    clock.phase = frame.phase;
+    const tune = blendStates(frame.weights, TUNE);
+    const level = frame.reduced ? blendEnergy(frame.weights, STATIC_PHASE) : frame.level;
+    clock.beat += step * tune.beatRate;
+    const wave = frame.reduced ? 0.5 : 0.5 - 0.5 * Math.cos(clock.beat * TAU);
+    const inner = level * tune.inner + wave * tune.beat * 0.4;
+    const outer = level * tune.outer + wave * tune.beat * 0.3;
+    clock.shader += step * (tune.flow + inner * 0.6);
+    clock.repetition = frame.reduced
+      ? tune.repetition
+      : approach(clock.repetition, tune.repetition, REPETITION_RATE, frame.dt);
+    const errorMix = clamp01(tune.error);
+    const colors = liveColors(colorFrom, colorTo, errorMix);
+    const colorKey = `${colors.from}${colors.to}${colors.back}`;
+    if (colorKey !== clock.colors) {
+      clock.colors = colorKey;
+      root.style.setProperty('--orb-live-from', colors.from);
+      root.style.setProperty('--orb-live-to', colors.to);
+      root.style.setProperty('--orb-live-back', colors.back);
     }
-    const acc = accRef.current;
-    let raf = 0;
-    let prev: number | null = null;
-    let clock = 0;
-    let lastPush = 0;
-    let active = true;
-    const frame = (now: number) => {
-      raf = 0;
-      const dt = Math.min(MAX_DT, prev === null ? 1 / 60 : (now - prev) / 1000);
-      prev = now;
-      const current = stateRef.current;
-      const multiplier = speedRef.current;
-      clock += dt * multiplier;
-      const live = levelRef?.current;
-      const hasLive = typeof live === 'number' && live >= 0;
-      acc.energy = approach(
-        acc.energy,
-        hasLive ? live : stateEnergy(current, clock),
-        ENERGY_RATE,
-        dt,
-      );
-      const target = rippleFor(current, acc.energy);
-      acc.distortion = approach(acc.distortion, target.distortion, MOTION_RATE, dt);
-      acc.contour = approach(acc.contour, target.contour, MOTION_RATE, dt);
-      acc.repetition = approach(acc.repetition, target.repetition, MOTION_RATE, dt);
-      acc.softness = approach(acc.softness, target.softness, MOTION_RATE, dt);
-      acc.shaderSpeed = approach(
-        acc.shaderSpeed,
-        shaderSpeedFor(current, multiplier),
-        SPEED_RATE,
-        dt,
-      );
-      acc.errorMix = approach(acc.errorMix, current === 'error' ? 1 : 0, ERROR_RATE, dt);
-      root.style.setProperty('--orb-level', acc.energy.toFixed(3));
-      if (showShader && now - lastPush > PUSH_INTERVAL_MS) {
-        lastPush = now;
-        const next: OrbMotionValues = {
-          energy: quantize(acc.energy, 50),
-          distortion: quantize(acc.distortion, 100),
-          contour: quantize(acc.contour, 100),
-          repetition: quantize(acc.repetition, 50),
-          softness: quantize(acc.softness, 100),
-          shaderSpeed: quantize(acc.shaderSpeed, 100),
-          errorMix: quantize(acc.errorMix, 100),
-        };
-        setMotion((prevMotion) => (sameMotion(prevMotion, next) ? prevMotion : next));
-      }
-      if (active) raf = requestAnimationFrame(frame);
-    };
-    const wake = () => {
-      if (raf === 0) {
-        prev = null;
-        raf = requestAnimationFrame(frame);
-      }
-    };
-    const halt = () => {
-      if (raf !== 0) {
-        cancelAnimationFrame(raf);
-        raf = 0;
-      }
-      prev = null;
-    };
-    const unobserve = observeActivity(root, (next) => {
-      active = next;
-      if (next) wake();
-      else halt();
+    root.style.setProperty('--orb-level', level.toFixed(4));
+    root.style.setProperty('--orb-outer', clamp01(outer).toFixed(4));
+    const mount = shaderRef.current?.paperShaderMount;
+    if (!mount) return;
+    mount.setUniforms({
+      u_colorBack: toShaderColor(hexToRgb(colors.back)),
+      u_colorTint: toShaderColor(hexToRgb(colors.tint)),
+      u_repetition: clock.repetition,
+      u_softness: tune.softness,
+      u_distortion: clamp01(tune.distortion + inner * 0.4),
+      u_contour: clamp01(tune.contour + inner * 0.3 + wave * tune.beat * 0.2),
+      u_shiftRed: 0.3 + errorMix * 0.3,
+      u_shiftBlue: 0.3 - errorMix * 0.3,
     });
-    wake();
-    return () => {
-      halt();
-      unobserve();
-    };
-  }, [levelRef, reduced, showShader]);
+    mount.setFrame(BASE_FRAME + clock.shader * 1000);
+  };
+
+  useOrbAnimator(rootRef, { state, levelRef, speed, onFrame });
 
   useEffect(() => {
     if (state !== 'error' || reduced) return;
@@ -277,39 +178,16 @@ export const MercuryOrb = ({
     return () => shake.cancel();
   }, [state, reduced]);
 
-  const staticLevel = stateEnergy(state, STATIC_PHASE);
-  const view: OrbMotionValues = reduced
-    ? {
-        energy: staticLevel,
-        ...rippleFor(state, staticLevel),
-        shaderSpeed: 0,
-        errorMix: state === 'error' ? 1 : 0,
-      }
-    : motion;
-  const errorMix = showShader ? view.errorMix : state === 'error' ? 1 : 0;
-  const from =
-    errorMix >= 1
-      ? ERROR_COLOR_FROM
-      : errorMix <= 0
-        ? colorFrom
-        : mixHex(colorFrom, ERROR_COLOR_FROM, errorMix);
-  const to =
-    errorMix >= 1
-      ? ERROR_COLOR_TO
-      : errorMix <= 0
-        ? colorTo
-        : mixHex(colorTo, ERROR_COLOR_TO, errorMix);
-  const core = mixHex(from, to, 0.5);
-  const backColor = shade(core, 0.72);
-  const tintColor = tint(core, 0.2);
+  const liveFrom = `var(--orb-live-from, ${colorFrom})`;
+  const liveTo = `var(--orb-live-to, ${colorTo})`;
   const fallbackLayers = [
     { key: 'brand', from: colorFrom, to: colorTo, visible: state !== 'error' },
     { key: 'error', from: ERROR_COLOR_FROM, to: ERROR_COLOR_TO, visible: state === 'error' },
   ].map(({ key, from: f, to: t, visible }) => ({
     key,
     visible,
-    base: `radial-gradient(circle at 50% 38%, ${tint(f, 0.5)}, ${mixHex(f, t, 0.5)} 45%, ${shade(t, 0.55)} 100%)`,
-    sheen: `conic-gradient(from 210deg at 50% 50%, transparent 0deg, ${tint(t, 0.65)} 40deg, transparent 90deg, ${tint(f, 0.4)} 180deg, transparent 240deg, ${tint(t, 0.5)} 300deg, transparent 360deg)`,
+    base: `radial-gradient(circle at 50% 38%, ${tintHex(f, 0.5)}, ${mixHex(f, t, 0.5)} 45%, ${shadeHex(t, 0.55)} 100%)`,
+    sheen: `conic-gradient(from 210deg at 50% 50%, transparent 0deg, ${tintHex(t, 0.65)} 40deg, transparent 90deg, ${tintHex(f, 0.4)} 180deg, transparent 240deg, ${tintHex(t, 0.5)} 300deg, transparent 360deg)`,
   }));
 
   return (
@@ -321,16 +199,14 @@ export const MercuryOrb = ({
       className={className}
       style={{
         ...orbVars({ size, speed, colorFrom, colorTo }),
-        ...(reduced ? ({ '--orb-level': staticLevel.toFixed(3) } as CSSProperties) : null),
         width: size,
         height: size,
         position: 'relative',
         borderRadius: '50%',
         opacity: state === 'disabled' ? 0.5 : 1,
         filter: state === 'disabled' ? 'grayscale(0.85)' : 'grayscale(0)',
-        transform: showShader ? `scale(${(1 + view.energy * 0.05).toFixed(4)})` : undefined,
-        scale: showShader ? undefined : 'calc(1 + var(--orb-level, 0) * 0.05)',
-        transition: 'transform 0.2s ease-out, opacity 0.3s ease-out, filter 0.3s ease-out',
+        scale: 'calc(1 + var(--orb-outer, 0) * 0.06)',
+        transition: 'opacity 0.6s ease-out, filter 0.6s ease-out',
       }}
     >
       <div
@@ -338,15 +214,8 @@ export const MercuryOrb = ({
           position: 'absolute',
           inset: 0,
           borderRadius: '50%',
-          boxShadow: `0 ${-size * 0.05}px ${size * 0.28}px color-mix(in oklab, ${from} 50%, transparent), 0 ${size * 0.05}px ${size * 0.28}px color-mix(in oklab, ${to} 50%, transparent)`,
-          opacity: showShader
-            ? Math.min(1, 0.3 + view.energy * 0.6)
-            : 'calc(0.3 + var(--orb-level, 0) * 0.6)',
-          transform: showShader ? `scale(${(1 + view.energy * 0.07).toFixed(4)})` : undefined,
-          scale: showShader ? undefined : 'calc(1 + var(--orb-level, 0) * 0.07)',
-          transition: showShader
-            ? 'opacity 0.2s ease-out, transform 0.2s ease-out, box-shadow 0.35s ease'
-            : 'box-shadow 0.35s ease',
+          boxShadow: `0 ${-size * 0.05}px ${size * 0.28}px calc(var(--orb-outer, 0) * ${size * 0.04}px) color-mix(in oklab, ${liveFrom} 50%, transparent), 0 ${size * 0.05}px ${size * 0.28}px calc(var(--orb-outer, 0) * ${size * 0.04}px) color-mix(in oklab, ${liveTo} 50%, transparent)`,
+          opacity: 'calc(0.3 + var(--orb-outer, 0) * 0.6 + var(--orb-level, 0) * 0.1)',
         }}
       />
       <div
@@ -356,29 +225,30 @@ export const MercuryOrb = ({
           inset: 0,
           borderRadius: '50%',
           overflow: 'hidden',
-          backgroundColor: backColor,
-          boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${from} 40%, transparent), 0 0 0 1px rgba(255,255,255,0.08)`,
-          transition: 'box-shadow 0.35s ease, background-color 0.35s ease',
+          backgroundColor: `var(--orb-live-back, ${seed.back})`,
+          boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${liveFrom} 40%, transparent), 0 0 0 1px rgba(255,255,255,0.08)`,
         }}
       >
         {showShader ? (
           <LiquidMetal
+            ref={bindShader}
             width={size}
             height={size}
             shape="circle"
             scale={1.05}
-            colorBack={backColor}
-            colorTint={tintColor}
-            repetition={view.repetition}
-            softness={view.softness}
-            shiftRed={0.3 + view.errorMix * 0.3}
-            shiftBlue={0.3 - view.errorMix * 0.3}
-            distortion={view.distortion}
-            contour={view.contour}
+            colorBack={seed.back}
+            colorTint={seed.tint}
+            repetition={seed.repetition}
+            softness={seed.softness}
+            shiftRed={0.3 + seed.error * 0.3}
+            shiftBlue={0.3 - seed.error * 0.3}
+            distortion={seed.distortion}
+            contour={seed.contour}
             angle={STRIPE_ANGLE}
-            speed={view.shaderSpeed}
+            speed={0}
             frame={BASE_FRAME}
-            minPixelRatio={2}
+            minPixelRatio={MAX_PIXEL_RATIO}
+            maxPixelCount={size * size * MAX_PIXEL_RATIO * MAX_PIXEL_RATIO}
             webGlContextAttributes={GL_ATTRIBUTES}
           />
         ) : (

@@ -1,55 +1,40 @@
 'use client';
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { DotOrbit as DotOrbitShader } from '@paper-design/shaders-react';
 import {
-  approach,
+  blendEnergy,
+  blendStates,
+  clamp01,
   ERROR_COLOR_FROM,
   ERROR_COLOR_TO,
   hexToRgb,
   orbVars,
-  stateEnergy,
   type OrbProps,
   type OrbState,
 } from '../../lib/orb-state';
-import { observeActivity } from '../../lib/use-in-view';
+import { mixHex, mixRgb, rgbToHex, shadeHex, tintHex, type Rgb } from '../../lib/orb-color';
+import { useOrbAnimator, type OrbFrame } from '../../lib/use-orb-animator';
+import { useReducedMotion } from '../../lib/use-reduced-motion';
 import { useWebGLSupport } from '../../lib/use-webgl-support';
 
-const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+type ShaderUniforms = Record<string, number | number[] | number[][]>;
 
-const subscribeReducedMotion = (onChange: () => void) => {
-  const mq = window.matchMedia(REDUCED_MOTION_QUERY);
-  mq.addEventListener('change', onChange);
-  return () => mq.removeEventListener('change', onChange);
-};
+interface PaperMount {
+  setUniforms: (uniforms: ShaderUniforms) => void;
+  setFrame: (frame: number) => void;
+}
 
-const useReducedMotion = () =>
-  useSyncExternalStore(
-    subscribeReducedMotion,
-    () => window.matchMedia(REDUCED_MOTION_QUERY).matches,
-    () => false,
-  );
-
-const mixHex = (a: string, b: string, t: number): string => {
-  const [ar, ag, ab] = hexToRgb(a);
-  const [br, bg, bb] = hexToRgb(b);
-  const channel = (x: number, y: number) =>
-    Math.round(x + (y - x) * t)
-      .toString(16)
-      .padStart(2, '0');
-  return `#${channel(ar, br)}${channel(ag, bg)}${channel(ab, bb)}`;
-};
-
-const shade = (hex: string, t: number) => mixHex(hex, '#000000', t);
-const tint = (hex: string, t: number) => mixHex(hex, '#ffffff', t);
+interface PaperHost {
+  paperShaderMount?: PaperMount;
+}
 
 const brandPalette = (from: string, to: string): string[] => [
-  tint(from, 0.35),
+  tintHex(from, 0.35),
   from,
   mixHex(from, to, 0.5),
   to,
-  tint(to, 0.55),
+  tintHex(to, 0.55),
   '#ffffff',
 ];
 
@@ -61,72 +46,44 @@ const GL_ATTRIBUTES: WebGLContextAttributes = {
 };
 
 const BASE_FRAME = 8000;
-const PUSH_INTERVAL_MS = 66;
-const MAX_DT = 0.1;
-const ENERGY_RATE = 7.5;
-const MOTION_RATE = 6;
-const SPEED_RATE = 5;
-const ERROR_RATE = 6;
 const STATIC_PHASE = 0.9;
+const RING_SCALE = 1.24;
+const MAX_PIXEL_RATIO = 2;
+const TAU = Math.PI * 2;
 
-const speedFor = (s: OrbState) =>
-  s === 'error'
-    ? 1.7
-    : s === 'listening'
-      ? 1.5
-      : s === 'speaking'
-        ? 1.15
-        : s === 'thinking'
-          ? 0.8
-          : s === 'connecting'
-            ? 0.5
-            : 0.3;
-
-const motionFor = (s: OrbState, energy: number) => {
-  switch (s) {
-    case 'thinking':
-      return { dotSize: 0.5, spreading: Math.min(1, 0.75 + energy * 0.25) };
-    case 'listening':
-    case 'speaking':
-      return {
-        dotSize: Math.min(1, 0.62 + energy * 0.38),
-        spreading: Math.min(1, 0.4 + energy * 0.6),
-      };
-    case 'error':
-      return { dotSize: 0.85, spreading: 1 };
-    case 'connecting':
-      return { dotSize: Math.min(0.85, 0.62 + energy * 0.23), spreading: 0.45 };
-    default:
-      return { dotSize: 0.68, spreading: 0.35 };
-  }
-};
-
-const shaderSpeedFor = (s: OrbState, multiplier: number) =>
-  s === 'disabled' ? 0 : speedFor(s) * multiplier;
-
-interface DotMotion {
-  energy: number;
+type DotTune = {
+  flow: number;
   dotSize: number;
   spreading: number;
-  shaderSpeed: number;
-  errorMix: number;
-}
+  outer: number;
+  inner: number;
+  beat: number;
+  beatRate: number;
+  error: number;
+};
 
-const motionSeed = (s: OrbState, multiplier: number): DotMotion => ({
-  energy: 0,
-  ...motionFor(s, 0),
-  shaderSpeed: shaderSpeedFor(s, multiplier),
-  errorMix: s === 'error' ? 1 : 0,
-});
+const TUNE: Record<OrbState, DotTune> = {
+  idle: { flow: 0.3, dotSize: 0.68, spreading: 0.35, outer: 0.25, inner: 0.2, beat: 0, beatRate: 0.3, error: 0 },
+  connecting: { flow: 0.4, dotSize: 0.64, spreading: 0.45, outer: 0.1, inner: 0.1, beat: 0.6, beatRate: 0.28, error: 0 },
+  listening: { flow: 0.7, dotSize: 0.62, spreading: 0.45, outer: 1, inner: 0.15, beat: 0, beatRate: 0.3, error: 0 },
+  thinking: { flow: 0.65, dotSize: 0.5, spreading: 0.75, outer: 0.1, inner: 0.1, beat: 1, beatRate: 0.5, error: 0 },
+  speaking: { flow: 1.1, dotSize: 0.66, spreading: 0.4, outer: 0.25, inner: 1, beat: 0, beatRate: 0.3, error: 0 },
+  error: { flow: 1.6, dotSize: 0.85, spreading: 1, outer: 0.2, inner: 0.2, beat: 0, beatRate: 0.3, error: 1 },
+  disabled: { flow: 0, dotSize: 0.6, spreading: 0.3, outer: 0, inner: 0, beat: 0, beatRate: 0.3, error: 0 },
+};
 
-const quantize = (value: number, steps: number) => Math.round(value * steps) / steps;
+const toShaderColor = ([r, g, b]: Rgb): number[] => [r / 255, g / 255, b / 255, 1];
 
-const sameMotion = (a: DotMotion, b: DotMotion) =>
-  a.energy === b.energy &&
-  a.dotSize === b.dotSize &&
-  a.spreading === b.spreading &&
-  a.shaderSpeed === b.shaderSpeed &&
-  a.errorMix === b.errorMix;
+const livePalette = (colorFrom: string, colorTo: string, errorMix: number): Rgb[] =>
+  brandPalette(colorFrom, colorTo).map((stop, index) =>
+    mixRgb(hexToRgb(stop), hexToRgb(ERROR_PALETTE[index]), errorMix),
+  );
+
+const coreFor = (f: string, t: string) =>
+  `radial-gradient(circle at 50% 40%, ${tintHex(mixHex(f, t, 0.5), 0.45)}, ${mixHex(f, t, 0.55)} 20%, ${shadeHex(f, 0.5)} 52%, ${shadeHex(t, 0.85)} 100%)`;
+
+const coreGlowFor = (f: string, t: string) =>
+  `radial-gradient(circle at 50% 40%, ${tintHex(t, 0.8)}, ${tintHex(mixHex(f, t, 0.5), 0.25)} 22%, transparent 46%)`;
 
 export const DotOrbit = ({
   state = 'idle',
@@ -141,13 +98,15 @@ export const DotOrbit = ({
 }: OrbProps) => {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const sphereRef = useRef<HTMLDivElement>(null);
-  const stateRef = useRef(state);
-  const speedRef = useRef(speed);
+  const shaderRef = useRef<PaperHost | null>(null);
+  const clockRef = useRef({ phase: 0, shader: 0, beat: 0, colors: '' });
   const reduced = useReducedMotion();
   const webgl = useWebGLSupport();
   const showShader = webgl === true;
-  const [motion, setMotion] = useState<DotMotion>(() => motionSeed(state, speed));
-  const accRef = useRef<DotMotion | null>(null);
+  const [seed] = useState(() => {
+    const tune = TUNE[state];
+    return { ...tune, colors: livePalette(colorFrom, colorTo, tune.error).map(rgbToHex) };
+  });
 
   const setRootRef = (node: HTMLDivElement | null) => {
     rootRef.current = node;
@@ -158,87 +117,48 @@ export const DotOrbit = ({
     }
   };
 
-  useEffect(() => {
-    stateRef.current = state;
-    speedRef.current = speed;
-  });
+  const bindShader = useCallback((node: PaperHost | null) => {
+    shaderRef.current = node;
+  }, []);
 
-  useEffect(() => {
-    if (reduced) return;
+  const onFrame = (frame: OrbFrame) => {
     const root = rootRef.current;
     if (!root) return;
-    if (accRef.current === null) {
-      accRef.current = motionSeed(stateRef.current, speedRef.current);
+    const clock = clockRef.current;
+    const step = Math.max(0, frame.phase - clock.phase);
+    clock.phase = frame.phase;
+    const tune = blendStates(frame.weights, TUNE);
+    const level = frame.reduced ? blendEnergy(frame.weights, STATIC_PHASE) : frame.level;
+    clock.beat += step * tune.beatRate;
+    const wave = frame.reduced ? 0.5 : 0.5 - 0.5 * Math.cos(clock.beat * TAU);
+    const inner = level * tune.inner + wave * tune.beat * 0.4;
+    const outer = level * tune.outer + wave * tune.beat * 0.3;
+    clock.shader += step * (tune.flow + outer * 0.6);
+    const errorMix = clamp01(tune.error);
+    const from = rgbToHex(mixRgb(hexToRgb(colorFrom), hexToRgb(ERROR_COLOR_FROM), errorMix));
+    const to = rgbToHex(mixRgb(hexToRgb(colorTo), hexToRgb(ERROR_COLOR_TO), errorMix));
+    const colorKey = `${from}${to}`;
+    if (colorKey !== clock.colors) {
+      clock.colors = colorKey;
+      root.style.setProperty('--orb-live-from', from);
+      root.style.setProperty('--orb-live-to', to);
+      root.style.setProperty('--orb-live-core', coreFor(from, to));
+      root.style.setProperty('--orb-live-core-glow', coreGlowFor(from, to));
     }
-    const acc = accRef.current;
-    let raf = 0;
-    let prev: number | null = null;
-    let clock = 0;
-    let lastPush = 0;
-    let active = true;
-    const frame = (now: number) => {
-      raf = 0;
-      const dt = Math.min(MAX_DT, prev === null ? 1 / 60 : (now - prev) / 1000);
-      prev = now;
-      const current = stateRef.current;
-      const multiplier = speedRef.current;
-      clock += dt * multiplier;
-      const live = levelRef?.current;
-      const hasLive = typeof live === 'number' && live >= 0;
-      acc.energy = approach(
-        acc.energy,
-        hasLive ? live : stateEnergy(current, clock),
-        ENERGY_RATE,
-        dt,
-      );
-      const target = motionFor(current, acc.energy);
-      acc.dotSize = approach(acc.dotSize, target.dotSize, MOTION_RATE, dt);
-      acc.spreading = approach(acc.spreading, target.spreading, MOTION_RATE, dt);
-      acc.shaderSpeed = approach(
-        acc.shaderSpeed,
-        shaderSpeedFor(current, multiplier),
-        SPEED_RATE,
-        dt,
-      );
-      acc.errorMix = approach(acc.errorMix, current === 'error' ? 1 : 0, ERROR_RATE, dt);
-      root.style.setProperty('--orb-level', acc.energy.toFixed(3));
-      if (showShader && now - lastPush > PUSH_INTERVAL_MS) {
-        lastPush = now;
-        const next: DotMotion = {
-          energy: quantize(acc.energy, 50),
-          dotSize: quantize(acc.dotSize, 100),
-          spreading: quantize(acc.spreading, 100),
-          shaderSpeed: quantize(acc.shaderSpeed, 100),
-          errorMix: quantize(acc.errorMix, 100),
-        };
-        setMotion((prevMotion) => (sameMotion(prevMotion, next) ? prevMotion : next));
-      }
-      if (active) raf = requestAnimationFrame(frame);
-    };
-    const wake = () => {
-      if (raf === 0) {
-        prev = null;
-        raf = requestAnimationFrame(frame);
-      }
-    };
-    const halt = () => {
-      if (raf !== 0) {
-        cancelAnimationFrame(raf);
-        raf = 0;
-      }
-      prev = null;
-    };
-    const unobserve = observeActivity(root, (next) => {
-      active = next;
-      if (next) wake();
-      else halt();
+    root.style.setProperty('--orb-level', level.toFixed(4));
+    root.style.setProperty('--orb-outer', clamp01(outer).toFixed(4));
+    root.style.setProperty('--orb-inner', clamp01(inner).toFixed(4));
+    const mount = shaderRef.current?.paperShaderMount;
+    if (!mount) return;
+    mount.setUniforms({
+      u_colors: livePalette(colorFrom, colorTo, errorMix).map(toShaderColor),
+      u_size: clamp01(tune.dotSize + inner * 0.3),
+      u_spreading: clamp01(tune.spreading + outer * 0.5 + wave * tune.beat * 0.2),
     });
-    wake();
-    return () => {
-      halt();
-      unobserve();
-    };
-  }, [levelRef, reduced, showShader]);
+    mount.setFrame(BASE_FRAME + clock.shader * 1000);
+  };
+
+  useOrbAnimator(rootRef, { state, levelRef, speed, onFrame });
 
   useEffect(() => {
     if (state !== 'error' || reduced) return;
@@ -258,40 +178,9 @@ export const DotOrbit = ({
     return () => shake.cancel();
   }, [state, reduced]);
 
-  const staticLevel = stateEnergy(state, STATIC_PHASE);
-  const view: DotMotion = reduced
-    ? {
-        energy: staticLevel,
-        ...motionFor(state, staticLevel),
-        shaderSpeed: 0,
-        errorMix: state === 'error' ? 1 : 0,
-      }
-    : motion;
-  const errorMix = showShader ? view.errorMix : state === 'error' ? 1 : 0;
-  const from =
-    errorMix >= 1
-      ? ERROR_COLOR_FROM
-      : errorMix <= 0
-        ? colorFrom
-        : mixHex(colorFrom, ERROR_COLOR_FROM, errorMix);
-  const to =
-    errorMix >= 1
-      ? ERROR_COLOR_TO
-      : errorMix <= 0
-        ? colorTo
-        : mixHex(colorTo, ERROR_COLOR_TO, errorMix);
-  const brandColors = brandPalette(colorFrom, colorTo);
-  const colors =
-    errorMix >= 1
-      ? ERROR_PALETTE
-      : errorMix <= 0
-        ? brandColors
-        : brandColors.map((stop, index) => mixHex(stop, ERROR_PALETTE[index], errorMix));
-  const coreFor = (f: string, t: string) =>
-    `radial-gradient(circle at 50% 40%, ${tint(mixHex(f, t, 0.5), 0.45)}, ${mixHex(f, t, 0.55)} 20%, ${shade(f, 0.5)} 52%, ${shade(t, 0.85)} 100%)`;
-  const core = coreFor(from, to);
-  const coreGlow = `radial-gradient(circle at 50% 40%, ${tint(to, 0.8)}, ${tint(mixHex(from, to, 0.5), 0.25)} 22%, transparent 46%)`;
-  const glow = `radial-gradient(circle at 50% 48%, color-mix(in oklab, ${from} 34%, transparent), color-mix(in oklab, ${to} 18%, transparent) 32%, transparent 58%)`;
+  const liveFrom = `var(--orb-live-from, ${colorFrom})`;
+  const liveTo = `var(--orb-live-to, ${colorTo})`;
+  const glow = `radial-gradient(circle at 50% 48%, color-mix(in oklab, ${liveFrom} 34%, transparent), color-mix(in oklab, ${liveTo} 18%, transparent) 32%, transparent 58%)`;
   const edgeMask =
     'radial-gradient(ellipse 50% 50% at 50% 50%, black 56%, rgba(0,0,0,0.6) 76%, transparent 96%)';
   const occlusionMask =
@@ -303,8 +192,8 @@ export const DotOrbit = ({
     key,
     visible,
     base: coreFor(f, t),
-    dots: `radial-gradient(circle, #ffffff 24%, transparent 30%), radial-gradient(circle, ${tint(t, 0.35)} 26%, transparent 32%), radial-gradient(circle, ${shade(f, 0.35)} 30%, transparent 36%)`,
-    glow: `radial-gradient(circle at 50% 40%, ${tint(t, 0.6)}, transparent 55%)`,
+    dots: `radial-gradient(circle, #ffffff 24%, transparent 30%), radial-gradient(circle, ${tintHex(t, 0.35)} 26%, transparent 32%), radial-gradient(circle, ${shadeHex(f, 0.35)} 30%, transparent 36%)`,
+    glow: `radial-gradient(circle at 50% 40%, ${tintHex(t, 0.6)}, transparent 55%)`,
   }));
 
   return (
@@ -316,15 +205,13 @@ export const DotOrbit = ({
       className={className}
       style={{
         ...orbVars({ size, speed, colorFrom, colorTo }),
-        ...(reduced ? ({ '--orb-level': staticLevel.toFixed(3) } as CSSProperties) : null),
         width: size,
         height: size,
         position: 'relative',
         opacity: state === 'disabled' ? 0.5 : 1,
         filter: state === 'disabled' ? 'grayscale(0.85)' : 'grayscale(0)',
-        transform: showShader ? `scale(${(1 + view.energy * 0.06).toFixed(4)})` : undefined,
-        scale: showShader ? undefined : 'calc(1 + var(--orb-level, 0) * 0.06)',
-        transition: 'transform 0.2s ease-out, opacity 0.3s ease-out, filter 0.3s ease-out',
+        scale: 'calc(1 + var(--orb-outer, 0) * 0.04 + var(--orb-inner, 0) * 0.02)',
+        transition: 'opacity 0.6s ease-out, filter 0.6s ease-out',
       }}
     >
       <div
@@ -333,12 +220,8 @@ export const DotOrbit = ({
           position: 'absolute',
           inset: '-24%',
           backgroundImage: glow,
-          opacity: showShader
-            ? Math.min(1, 0.35 + view.energy * 0.65)
-            : 'calc(0.35 + var(--orb-level, 0) * 0.6)',
-          transform: showShader ? `scale(${(1 + view.energy * 0.08).toFixed(4)})` : undefined,
-          scale: showShader ? undefined : 'calc(1 + var(--orb-level, 0) * 0.08)',
-          transition: showShader ? 'opacity 0.2s ease-out, transform 0.2s ease-out' : undefined,
+          opacity: 'calc(0.35 + var(--orb-outer, 0) * 0.6 + var(--orb-level, 0) * 0.05)',
+          scale: 'calc(1 + var(--orb-outer, 0) * 0.1)',
         }}
       />
       <div
@@ -348,7 +231,8 @@ export const DotOrbit = ({
           inset: '18%',
           borderRadius: '50%',
           overflow: 'hidden',
-          backgroundImage: core,
+          backgroundImage: `var(--orb-live-core, ${coreFor(colorFrom, colorTo)})`,
+          scale: 'calc(1 + var(--orb-inner, 0) * 0.05)',
         }}
       >
         {showShader ? (
@@ -358,9 +242,8 @@ export const DotOrbit = ({
               position: 'absolute',
               inset: 0,
               borderRadius: '50%',
-              backgroundImage: coreGlow,
-              opacity: Math.min(1, 0.3 + view.energy * 0.7),
-              transition: 'opacity 0.2s ease-out',
+              backgroundImage: `var(--orb-live-core-glow, ${coreGlowFor(colorFrom, colorTo)})`,
+              opacity: 'calc(0.3 + var(--orb-inner, 0) * 0.7)',
             }}
           />
         ) : (
@@ -383,7 +266,7 @@ export const DotOrbit = ({
                   inset: 0,
                   borderRadius: '50%',
                   backgroundImage: layer.glow,
-                  opacity: 'calc(0.25 + var(--orb-level, 0) * 0.75)',
+                  opacity: 'calc(0.25 + var(--orb-inner, 0) * 0.75)',
                 }}
               />
             </div>
@@ -416,24 +299,27 @@ export const DotOrbit = ({
             style={{
               position: 'absolute',
               inset: 0,
-              transform: `rotate(-18deg) scaleY(0.86) scale(${(1 + view.energy * 0.1).toFixed(4)})`,
+              transform: 'rotate(-18deg) scaleY(0.86)',
+              scale: 'calc(1 + var(--orb-outer, 0) * 0.1)',
               maskImage: edgeMask,
               WebkitMaskImage: edgeMask,
             }}
           >
             <DotOrbitShader
-              width={size * 1.24}
-              height={size * 1.24}
-              colors={colors}
+              ref={bindShader}
+              width={size * RING_SCALE}
+              height={size * RING_SCALE}
+              colors={seed.colors}
               colorBack="#00000000"
-              size={view.dotSize}
+              size={seed.dotSize}
               sizeRange={0.4}
-              spreading={view.spreading}
+              spreading={seed.spreading}
               stepsPerColor={1}
               scale={0.62}
-              speed={view.shaderSpeed}
+              speed={0}
               frame={BASE_FRAME}
-              minPixelRatio={2}
+              minPixelRatio={MAX_PIXEL_RATIO}
+              maxPixelCount={Math.round(size * RING_SCALE * size * RING_SCALE * MAX_PIXEL_RATIO * MAX_PIXEL_RATIO)}
               webGlContextAttributes={GL_ATTRIBUTES}
             />
           </div>
@@ -448,9 +334,10 @@ export const DotOrbit = ({
                 backgroundSize: `${size * 0.2}px ${size * 0.2}px, ${size * 0.15}px ${size * 0.15}px, ${size * 0.12}px ${size * 0.12}px`,
                 backgroundPosition: `0 0, ${size * 0.07}px ${size * 0.08}px, ${size * 0.03}px ${size * 0.12}px`,
                 transform: 'rotate(-18deg) scaleY(0.86)',
+                scale: 'calc(1 + var(--orb-outer, 0) * 0.1)',
                 maskImage: edgeMask,
                 WebkitMaskImage: edgeMask,
-                opacity: layer.visible ? 'calc(0.6 + var(--orb-level, 0) * 0.4)' : 0,
+                opacity: layer.visible ? 'calc(0.6 + var(--orb-outer, 0) * 0.4)' : 0,
                 transition: 'opacity 0.35s ease',
               }}
             />

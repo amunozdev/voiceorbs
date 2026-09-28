@@ -127,7 +127,7 @@ export const createStateMix = (initial: OrbState = 'idle'): StateMix => {
   return { weights, update };
 };
 
-export const blendStates = <T extends Record<string, number>>(
+export const blendStates = <T extends { [K in keyof T]: number }>(
   weights: StateWeights,
   table: Record<OrbState, T>,
 ): T => {
@@ -136,7 +136,7 @@ export const blendStates = <T extends Record<string, number>>(
     const w = weights[key];
     if (w === 0) continue;
     const row = table[key];
-    for (const param of Object.keys(row)) out[param] = (out[param] ?? 0) + row[param] * w;
+    for (const param of Object.keys(row) as (keyof T & string)[]) out[param] = (out[param] ?? 0) + row[param] * w;
   }
   return out as T;
 };

@@ -18,11 +18,14 @@ export const observeActivity = (
     onChange(next);
   };
 
-  const observer = new IntersectionObserver((entries) => {
-    inView = entries[entries.length - 1]?.isIntersecting ?? true;
-    sync();
-  });
-  observer.observe(el);
+  const observer =
+    typeof IntersectionObserver === 'undefined'
+      ? null
+      : new IntersectionObserver((entries) => {
+          inView = entries[entries.length - 1]?.isIntersecting ?? true;
+          sync();
+        });
+  observer?.observe(el);
 
   const onVisibility = () => {
     pageVisible = document.visibilityState === 'visible';
@@ -31,7 +34,7 @@ export const observeActivity = (
   document.addEventListener('visibilitychange', onVisibility);
 
   return () => {
-    observer.disconnect();
+    observer?.disconnect();
     document.removeEventListener('visibilitychange', onVisibility);
   };
 };

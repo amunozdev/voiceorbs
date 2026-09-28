@@ -18,6 +18,7 @@ export const MAX_FRAME_DT = 0.1;
 
 export interface OrbFrame {
   dt: number;
+  dPhase: number;
   phase: number;
   time: number;
   weights: StateWeights;
@@ -51,6 +52,7 @@ export const useOrbAnimator = (
   const wakeRef = useRef<() => void>(() => {});
   const frameRef = useRef<OrbFrame>({
     dt: 0,
+    dPhase: 0,
     phase: 0,
     time: 0,
     weights: createStateMix(state).weights,
@@ -85,9 +87,10 @@ export const useOrbAnimator = (
       const live = opts.levelRef?.current;
       const hasLive = typeof live === 'number' && live >= 0;
       mix.update(opts.state, dt);
+      frame.dPhase = reduced ? 0 : dt * Math.max(0, opts.speed);
       if (!reduced) {
         frame.time += dt;
-        frame.phase += dt * Math.max(0, opts.speed);
+        frame.phase += frame.dPhase;
       }
       const target = reduced ? 0 : hasLive ? live : blendEnergy(mix.weights, frame.phase);
       frame.level = smoothLevel(frame.level, target, dt);

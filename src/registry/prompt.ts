@@ -19,7 +19,7 @@ const PROVIDER_NOTES: Record<Exclude<PromptProvider, 'generic'>, string> = {
   vapi: `Provider wiring (Vapi):
 - Install @vapi-ai/web and create the client once: const vapi = new Vapi(PUBLIC_KEY).
 - Map the call lifecycle to state: after vapi.start(assistantId) setState('connecting'); vapi.on('call-start', () => setState('listening')); vapi.on('speech-start', () => setState('speaking')); vapi.on('speech-end', () => setState('listening')); vapi.on('call-end', () => setState('idle')); vapi.on('error', () => setState('error')). speech-start/speech-end refer to the assistant speaking.
-- Drive the level without useAudioLevel: keep const levelRef = useRef(-1) and subscribe vapi.on('volume-level', (volume) => { levelRef.current = volume; }) — volume is already normalized 0..1.
+- Drive the level without useAudioLevel: keep const levelRef = useRef(-1) and subscribe vapi.on('volume-level', (volume) => { levelRef.current = volume; }); volume is already normalized 0..1.
 - Reset levelRef.current = -1 on call-end so the orb falls back to its procedural animation.`,
   elevenlabs: `Provider wiring (ElevenLabs Agents):
 - Install @elevenlabs/react and use the useConversation hook.
@@ -34,7 +34,7 @@ const PROVIDER_NOTES: Record<Exclude<PromptProvider, 'generic'>, string> = {
   'openai-realtime': `Provider wiring (OpenAI Realtime, WebRTC):
 - After creating the RTCPeerConnection and offer, setState('connecting'); when the data channel opens, setState('listening').
 - Map server events from the data channel to state: 'input_audio_buffer.speech_started' -> 'listening'; 'response.created' -> 'thinking'; 'output_audio_buffer.started' (or the first audio delta) -> 'speaking'; 'output_audio_buffer.stopped' and 'response.done' -> 'listening'; 'error' -> 'error'; on connection close -> 'idle'.
-- Drive the level from the remote audio: in pc.ontrack, create an AudioContext and an AnalyserNode over new MediaStream([event.track]), and in a requestAnimationFrame loop write the normalized amplitude (average of getByteFrequencyData / 255) to levelRef.current — reuse the math from the bundled use-audio-level.ts.
+- Drive the level from the remote audio: in pc.ontrack, create an AudioContext and an AnalyserNode over new MediaStream([event.track]), and in a requestAnimationFrame loop write the normalized amplitude (average of getByteFrequencyData / 255) to levelRef.current; reuse the math from the bundled use-audio-level.ts.
 - Reset levelRef.current = -1 when the session closes.`,
 };
 

@@ -35,7 +35,7 @@ export const EqualizerOrb = ({
   ref,
 }: OrbProps) => {
   const innerRef = useRef<HTMLDivElement>(null);
-  useOrbLevel(innerRef, state, levelRef);
+  useOrbLevel(innerRef, state, levelRef, undefined, speed);
   const setRef = useCallback(
     (node: HTMLDivElement | null) => {
       innerRef.current = node;

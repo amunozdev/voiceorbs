@@ -29,7 +29,7 @@ export const HaloOrb = ({
     [refProp],
   );
 
-  useOrbLevel(innerRef, state, levelRef);
+  useOrbLevel(innerRef, state, levelRef, undefined, speed);
 
   return (
     <div

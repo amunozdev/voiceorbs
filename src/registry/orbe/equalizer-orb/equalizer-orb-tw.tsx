@@ -12,7 +12,7 @@ const BARS = [
   {
     h: '48%',
     gain: 0.55,
-    hue: '-5deg',
+    hue: -5,
     dur: '0.96s',
     delay: '-0.31s',
     ease: 'cubic-bezier(0.45, 0, 0.55, 1)',
@@ -21,7 +21,7 @@ const BARS = [
   {
     h: '66%',
     gain: 0.7,
-    hue: '-3deg',
+    hue: -3,
     dur: '0.78s',
     delay: '-0.12s',
     ease: 'cubic-bezier(0.33, 0.72, 0.3, 1)',
@@ -30,7 +30,7 @@ const BARS = [
   {
     h: '86%',
     gain: 0.9,
-    hue: '-1deg',
+    hue: -1,
     dur: '1.08s',
     delay: '-0.54s',
     ease: 'cubic-bezier(0.6, 0.04, 0.4, 0.96)',
@@ -39,7 +39,7 @@ const BARS = [
   {
     h: '100%',
     gain: 1,
-    hue: '0deg',
+    hue: 0,
     dur: '0.72s',
     delay: '-0.2s',
     ease: 'cubic-bezier(0.45, 0, 0.55, 1)',
@@ -48,7 +48,7 @@ const BARS = [
   {
     h: '84%',
     gain: 0.88,
-    hue: '1deg',
+    hue: 1,
     dur: '0.9s',
     delay: '-0.66s',
     ease: 'cubic-bezier(0.33, 0.72, 0.3, 1)',
@@ -57,7 +57,7 @@ const BARS = [
   {
     h: '64%',
     gain: 0.72,
-    hue: '3deg',
+    hue: 3,
     dur: '0.84s',
     delay: '-0.4s',
     ease: 'cubic-bezier(0.6, 0.04, 0.4, 0.96)',
@@ -66,7 +66,7 @@ const BARS = [
   {
     h: '50%',
     gain: 0.55,
-    hue: '5deg',
+    hue: 5,
     dur: '1.02s',
     delay: '-0.09s',
     ease: 'cubic-bezier(0.45, 0, 0.55, 1)',
@@ -80,12 +80,16 @@ const EQ_TW_CSS = `
 @property --etw-ring { syntax: '<number>'; inherits: true; initial-value: 0; }
 @property --etw-breathe { syntax: '<number>'; inherits: true; initial-value: 0; }
 @property --etw-shake { syntax: '<number>'; inherits: true; initial-value: 0; }
+@property --etw-talk { syntax: '<number>'; inherits: true; initial-value: 0; }
 [data-equalizer-orb-tw] {
   --etw-from: var(--orb-color-from);
   --etw-to: var(--orb-color-to);
   --etw-ring: 0;
   --etw-breathe: 0;
   --etw-shake: 0;
+  --etw-talk: 0;
+  --orb-dur: 0.2s;
+  --orb-ease: cubic-bezier(0.16, 1, 0.3, 1);
   --etw-ink: color-mix(in oklab, var(--etw-from) 45%, #0f172a);
   --etw-halo-mix: color-mix(in oklab, var(--etw-from), var(--etw-to) 60%);
   --etw-surface-hi: color-mix(in oklab, var(--etw-from) 10%, #ffffff);
@@ -105,14 +109,14 @@ const EQ_TW_CSS = `
   --etw-shadow-active:
     0 16px 34px -16px var(--etw-shadow-tint-active),
     0 0 40px -6px var(--etw-shadow-glow-active);
-  transition:
-    opacity 0.3s ease,
-    filter 0.3s ease,
-    --etw-from 0.35s ease,
-    --etw-to 0.35s ease,
-    --etw-ring 0.35s ease,
-    --etw-breathe 0.35s ease,
-    --etw-shake 0.35s ease;
+  transition-property:
+    opacity, filter, --etw-from, --etw-to, --etw-ring, --etw-breathe, --etw-shake, --etw-talk;
+  transition-duration: var(--orb-dur);
+  transition-timing-function: var(--orb-ease);
+}
+[data-equalizer-orb-tw]:is([data-state='idle'], [data-state='disabled']) {
+  --orb-dur: 0.6s;
+  --orb-ease: cubic-bezier(0.65, 0, 0.35, 1);
 }
 @media (prefers-color-scheme: dark) {
   [data-equalizer-orb-tw] {
@@ -173,6 +177,7 @@ const EQ_TW_CSS = `
 }
 [data-equalizer-orb-tw][data-state='idle'] { --etw-breathe: 1; }
 [data-equalizer-orb-tw][data-state='listening'] { --etw-ring: 1; }
+[data-equalizer-orb-tw][data-state='speaking'] { --etw-talk: 1; }
 [data-equalizer-orb-tw][data-state='error'] {
   --etw-from: ${ERROR_COLOR_FROM};
   --etw-to: ${ERROR_COLOR_TO};
@@ -182,15 +187,16 @@ const EQ_TW_CSS = `
 [data-equalizer-orb-tw] [data-eq-ring] {
   border: 1.5px solid color-mix(in oklab, var(--etw-from), var(--etw-to) 45%);
   opacity: calc(var(--etw-ring) * (0.18 + 0.6 * var(--orb-level, 0)));
-  transform: scale(calc(0.94 + var(--etw-ring) * (0.025 + 0.05 * var(--orb-level, 0))));
+  transform: scale(calc(0.94 + var(--etw-ring) * (0.025 + 0.08 * var(--orb-level, 0))));
 }
 [data-equalizer-orb-tw] [data-eq-disc] {
   background: radial-gradient(120% 120% at 50% 18%, var(--etw-surface-hi), var(--etw-surface-lo) 78%);
   box-shadow:
     inset 0 0 0 1px var(--etw-rim),
     var(--etw-shadow);
-  transform: scale(calc(1 + 0.02 * var(--orb-level, 0)));
-  transition: box-shadow 0.35s ease;
+  --etw-disc-scale: calc(1 + (0.02 + 0.05 * var(--etw-ring)) * var(--orb-level, 0));
+  transform: scale(var(--etw-disc-scale));
+  transition: box-shadow var(--orb-dur) var(--orb-ease);
   animation: etw-breathe calc(4s / var(--orb-speed, 1)) ease-in-out infinite paused;
 }
 [data-equalizer-orb-tw][data-state='idle'] [data-eq-disc] { animation-play-state: running; }
@@ -219,13 +225,13 @@ const EQ_TW_CSS = `
 }
 [data-equalizer-orb-tw] [data-eq-halo] {
   background: radial-gradient(circle, var(--etw-glow-halo), transparent 70%);
-  opacity: calc(0.16 + 0.4 * var(--orb-level, 0));
-  transform: scale(calc(1 + 0.12 * var(--orb-level, 0)));
+  opacity: calc(0.16 + (0.3 + 0.2 * var(--etw-ring)) * var(--orb-level, 0));
+  transform: scale(calc(1 + (0.08 + 0.1 * var(--etw-ring)) * var(--orb-level, 0)));
 }
 [data-equalizer-orb-tw] [data-eq-core] {
   background: radial-gradient(circle, var(--etw-glow-core), transparent 68%);
-  opacity: calc(0.26 + 0.5 * var(--orb-level, 0));
-  transform: scale(calc(1 + 0.2 * var(--orb-level, 0)));
+  opacity: calc(0.26 + (0.36 + 0.3 * var(--etw-talk)) * var(--orb-level, 0));
+  transform: scale(calc(1 + (0.12 + 0.14 * var(--etw-talk)) * var(--orb-level, 0)));
 }
 [data-equalizer-orb-tw] [data-eq-bars] {
   -webkit-box-reflect: below 2px linear-gradient(to bottom, transparent 55%, rgb(0 0 0 / 0.3));
@@ -234,7 +240,7 @@ const EQ_TW_CSS = `
 [data-equalizer-orb-tw][data-state='error'] [data-eq-bars] { animation-play-state: running; }
 [data-equalizer-orb-tw] [data-layer] {
   opacity: 0;
-  transition: opacity 0.35s ease;
+  transition: opacity var(--orb-dur) var(--orb-ease);
 }
 [data-equalizer-orb-tw]:is([data-state='idle'], [data-state='disabled']) [data-layer='idle'],
 [data-equalizer-orb-tw]:is([data-state='listening'], [data-state='speaking']) [data-layer='active'],
@@ -242,20 +248,32 @@ const EQ_TW_CSS = `
 [data-equalizer-orb-tw][data-state='connecting'] [data-layer='sweep'],
 [data-equalizer-orb-tw][data-state='error'] [data-layer='flat'] { opacity: 1; }
 [data-equalizer-orb-tw] [data-bar] {
+  --bar-drive: calc(var(--bar-level) * (1 - 0.6 * var(--etw-ring)));
   --etw-dot: calc(var(--orb-size) * (0.013 + 0.006 * var(--bar-gain)));
-  --etw-lo: calc((7% + 9% * var(--bar-level)) * var(--bar-gain));
-  --etw-mid: calc((14% + 22% * var(--bar-level)) * var(--bar-gain));
-  --etw-mh: calc((17% + 28% * var(--bar-level)) * var(--bar-gain));
-  --etw-hi: calc((20% + 34% * var(--bar-level)) * var(--bar-gain));
-  --etw-cn: calc((13% + 24% * var(--bar-level)) * (0.7 + 0.3 * var(--bar-gain)));
+  --etw-lo: calc((7% + 9% * var(--bar-drive)) * var(--bar-gain));
+  --etw-mid: calc((14% + 22% * var(--bar-drive)) * var(--bar-gain));
+  --etw-mh: calc((17% + 28% * var(--bar-drive)) * var(--bar-gain));
+  --etw-hi: calc((20% + 34% * var(--bar-drive)) * var(--bar-gain));
+  --etw-cn: calc((13% + 24% * var(--bar-drive)) * (0.7 + 0.3 * var(--bar-gain)));
   background: linear-gradient(
     to top,
     var(--etw-from),
     color-mix(in oklab, var(--etw-from), var(--etw-to) 55%) 55%,
     color-mix(in oklab, var(--etw-to), white 30%)
   );
-  filter: hue-rotate(var(--bar-hue));
+  filter: hue-rotate(calc(var(--bar-hue) * 1deg));
   clip-path: inset(calc(50% - var(--etw-dot)) 0 round 999px);
+}
+@supports (color: oklch(from red l c calc(h + 1))) {
+  [data-equalizer-orb-tw] [data-bar] {
+    background: linear-gradient(
+      to top,
+      oklch(from var(--etw-from) l c calc(h + var(--bar-hue))),
+      oklch(from color-mix(in oklab, var(--etw-from), var(--etw-to) 55%) l c calc(h + var(--bar-hue))) 55%,
+      oklch(from color-mix(in oklab, var(--etw-to), white 30%) l c calc(h + var(--bar-hue)))
+    );
+    filter: none;
+  }
 }
 [data-equalizer-orb-tw] [data-layer='flat'] [data-bar] {
   clip-path: inset(calc(50% - var(--orb-size) * 0.012) 0 round 999px);
@@ -314,8 +332,8 @@ const EQ_TW_CSS = `
   12% { clip-path: inset(calc(50% - var(--etw-cn)) 0 round 999px); }
 }
 @keyframes etw-breathe {
-  0%, 100% { transform: scale(calc(1 + 0.02 * var(--orb-level, 0))); }
-  50% { transform: scale(calc(1 + 0.02 * var(--orb-level, 0) + 0.02 * var(--etw-breathe))); }
+  0%, 100% { transform: scale(var(--etw-disc-scale)); }
+  50% { transform: scale(calc(var(--etw-disc-scale) + 0.02 * var(--etw-breathe))); }
 }
 @keyframes etw-shake {
   0%, 22%, 100% { transform: translateX(0); }
@@ -355,7 +373,7 @@ export const EqualizerOrbTw = ({
   ref,
 }: OrbProps) => {
   const innerRef = useRef<HTMLDivElement>(null);
-  useOrbLevel(innerRef, state, levelRef);
+  useOrbLevel(innerRef, state, levelRef, undefined, speed);
   const setRef = useCallback(
     (node: HTMLDivElement | null) => {
       innerRef.current = node;
@@ -410,7 +428,7 @@ export const EqualizerOrbTw = ({
                       height: bar.h,
                       '--bar-level': bar.level,
                       '--bar-gain': `${bar.gain}`,
-                      '--bar-hue': bar.hue,
+                      '--bar-hue': `${bar.hue}`,
                       '--bar-i': `${index}`,
                       '--bar-dur': bar.dur,
                       '--bar-delay': bar.delay,

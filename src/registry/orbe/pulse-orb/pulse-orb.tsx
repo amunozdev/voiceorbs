@@ -17,7 +17,7 @@ export const PulseOrb = ({
   ref,
 }: OrbProps) => {
   const internalRef = useRef<HTMLDivElement | null>(null);
-  useOrbLevel(internalRef, state, levelRef);
+  useOrbLevel(internalRef, state, levelRef, undefined, speed);
   const setRef = useCallback(
     (node: HTMLDivElement | null) => {
       internalRef.current = node;

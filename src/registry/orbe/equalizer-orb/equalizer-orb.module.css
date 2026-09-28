@@ -22,6 +22,12 @@
   initial-value: 0;
 }
 
+@property --eq-talk {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
 @property --eq-shake {
   syntax: '<number>';
   inherits: true;
@@ -42,6 +48,9 @@
   --eq-ring: 0;
   --eq-breathe: 0;
   --eq-shake: 0;
+  --eq-talk: 0;
+  --orb-dur: 0.2s;
+  --orb-ease: cubic-bezier(0.16, 1, 0.3, 1);
   --eq-ink: color-mix(in oklab, var(--eq-from) 45%, #0f172a);
   --eq-halo-mix: color-mix(in oklab, var(--eq-from), var(--eq-to) 60%);
   --eq-surface-hi: color-mix(in oklab, var(--eq-from) 10%, #ffffff);
@@ -67,14 +76,15 @@
   width: var(--orb-size);
   height: var(--orb-size);
   isolation: isolate;
-  transition:
-    opacity 0.3s ease,
-    filter 0.3s ease,
-    --eq-from 0.35s ease,
-    --eq-to 0.35s ease,
-    --eq-ring 0.35s ease,
-    --eq-breathe 0.35s ease,
-    --eq-shake 0.35s ease;
+  transition-property:
+    opacity, filter, --eq-from, --eq-to, --eq-ring, --eq-breathe, --eq-shake, --eq-talk;
+  transition-duration: var(--orb-dur);
+  transition-timing-function: var(--orb-ease);
+}
+
+.orb:is([data-state='idle'], [data-state='disabled']) {
+  --orb-dur: 0.6s;
+  --orb-ease: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -144,6 +154,10 @@
   --eq-ring: 1;
 }
 
+.orb[data-state='speaking'] {
+  --eq-talk: 1;
+}
+
 .orb[data-state='error'] {
   --eq-from: #fb7185;
   --eq-to: #f43f5e;
@@ -162,7 +176,7 @@
   border-radius: 50%;
   border: 1.5px solid color-mix(in oklab, var(--eq-from), var(--eq-to) 45%);
   opacity: calc(var(--eq-ring) * (0.18 + 0.6 * var(--orb-level)));
-  transform: scale(calc(0.94 + var(--eq-ring) * (0.025 + 0.05 * var(--orb-level))));
+  transform: scale(calc(0.94 + var(--eq-ring) * (0.025 + 0.08 * var(--orb-level))));
 }
 
 .disc {
@@ -177,8 +191,9 @@
   box-shadow:
     inset 0 0 0 1px var(--eq-rim),
     var(--eq-shadow);
-  transform: scale(calc(1 + 0.02 * var(--orb-level)));
-  transition: box-shadow 0.35s ease;
+  --eq-disc-scale: calc(1 + (0.02 + 0.05 * var(--eq-ring)) * var(--orb-level));
+  transform: scale(var(--eq-disc-scale));
+  transition: box-shadow var(--orb-dur) var(--orb-ease);
   animation: eq-breathe calc(4s / var(--orb-speed)) ease-in-out infinite paused;
 }
 
@@ -221,8 +236,8 @@
   border-radius: 50%;
   background: radial-gradient(circle, var(--eq-glow-halo), transparent 70%);
   filter: blur(24px);
-  opacity: calc(0.16 + 0.4 * var(--orb-level));
-  transform: scale(calc(1 + 0.12 * var(--orb-level)));
+  opacity: calc(0.16 + (0.3 + 0.2 * var(--eq-ring)) * var(--orb-level));
+  transform: scale(calc(1 + (0.08 + 0.1 * var(--eq-ring)) * var(--orb-level)));
 }
 
 .glowCore {
@@ -233,8 +248,8 @@
   border-radius: 50%;
   background: radial-gradient(circle, var(--eq-glow-core), transparent 68%);
   filter: blur(6px);
-  opacity: calc(0.26 + 0.5 * var(--orb-level));
-  transform: scale(calc(1 + 0.2 * var(--orb-level)));
+  opacity: calc(0.26 + (0.36 + 0.3 * var(--eq-talk)) * var(--orb-level));
+  transform: scale(calc(1 + (0.12 + 0.14 * var(--eq-talk)) * var(--orb-level)));
 }
 
 .bars {
@@ -260,7 +275,7 @@
   width: 100%;
   height: 100%;
   opacity: 0;
-  transition: opacity 0.35s ease;
+  transition: opacity var(--orb-dur) var(--orb-ease);
 }
 
 .orb[data-state='idle'] .layerIdle,
@@ -274,12 +289,13 @@
 }
 
 .bar {
+  --bar-drive: calc(var(--bar-level) * (1 - 0.6 * var(--eq-ring)));
   --eq-dot: calc(var(--orb-size) * (0.013 + 0.006 * var(--bar-gain)));
-  --eq-lo: calc((7% + 9% * var(--bar-level)) * var(--bar-gain));
-  --eq-mid: calc((14% + 22% * var(--bar-level)) * var(--bar-gain));
-  --eq-mh: calc((17% + 28% * var(--bar-level)) * var(--bar-gain));
-  --eq-hi: calc((20% + 34% * var(--bar-level)) * var(--bar-gain));
-  --eq-cn: calc((13% + 24% * var(--bar-level)) * (0.7 + 0.3 * var(--bar-gain)));
+  --eq-lo: calc((7% + 9% * var(--bar-drive)) * var(--bar-gain));
+  --eq-mid: calc((14% + 22% * var(--bar-drive)) * var(--bar-gain));
+  --eq-mh: calc((17% + 28% * var(--bar-drive)) * var(--bar-gain));
+  --eq-hi: calc((20% + 34% * var(--bar-drive)) * var(--bar-gain));
+  --eq-cn: calc((13% + 24% * var(--bar-drive)) * (0.7 + 0.3 * var(--bar-gain)));
   width: 8%;
   height: var(--bar-h);
   border-radius: 999px;
@@ -292,11 +308,25 @@
   filter: hue-rotate(var(--bar-hue));
 }
 
+@supports (color: oklch(from red l c calc(h + 1))) {
+  .bar {
+    background: linear-gradient(
+      to top,
+      oklch(from var(--eq-from) l c calc(h + var(--bar-hue-n))),
+      oklch(from color-mix(in oklab, var(--eq-from), var(--eq-to) 55%) l c calc(h + var(--bar-hue-n)))
+        55%,
+      oklch(from color-mix(in oklab, var(--eq-to), #fff 30%) l c calc(h + var(--bar-hue-n)))
+    );
+    filter: none;
+  }
+}
+
 .bar1 {
   --bar-level: var(--orb-treble);
   --bar-h: 48%;
   --bar-gain: 0.55;
   --bar-hue: -5deg;
+  --bar-hue-n: -5;
   --bar-i: 0;
   --bar-dur: 0.96s;
   --bar-delay: -0.31s;
@@ -308,6 +338,7 @@
   --bar-h: 66%;
   --bar-gain: 0.7;
   --bar-hue: -3deg;
+  --bar-hue-n: -3;
   --bar-i: 1;
   --bar-dur: 0.78s;
   --bar-delay: -0.12s;
@@ -319,6 +350,7 @@
   --bar-h: 86%;
   --bar-gain: 0.9;
   --bar-hue: -1deg;
+  --bar-hue-n: -1;
   --bar-i: 2;
   --bar-dur: 1.08s;
   --bar-delay: -0.54s;
@@ -330,6 +362,7 @@
   --bar-h: 100%;
   --bar-gain: 1;
   --bar-hue: 0deg;
+  --bar-hue-n: 0;
   --bar-i: 3;
   --bar-dur: 0.72s;
   --bar-delay: -0.2s;
@@ -341,6 +374,7 @@
   --bar-h: 84%;
   --bar-gain: 0.88;
   --bar-hue: 1deg;
+  --bar-hue-n: 1;
   --bar-i: 4;
   --bar-dur: 0.9s;
   --bar-delay: -0.66s;
@@ -352,6 +386,7 @@
   --bar-h: 64%;
   --bar-gain: 0.72;
   --bar-hue: 3deg;
+  --bar-hue-n: 3;
   --bar-i: 5;
   --bar-dur: 0.84s;
   --bar-delay: -0.4s;
@@ -363,6 +398,7 @@
   --bar-h: 50%;
   --bar-gain: 0.55;
   --bar-hue: 5deg;
+  --bar-hue-n: 5;
   --bar-i: 6;
   --bar-dur: 1.02s;
   --bar-delay: -0.09s;
@@ -572,10 +608,10 @@
 @keyframes eq-y {
   0%,
   100% {
-    transform: scaleY(calc((0.12 + 0.14 * var(--bar-level)) * var(--bar-gain)));
+    transform: scaleY(calc((0.12 + 0.14 * var(--bar-drive)) * var(--bar-gain)));
   }
   50% {
-    transform: scaleY(calc((0.4 + 0.66 * var(--bar-level)) * var(--bar-gain)));
+    transform: scaleY(calc((0.4 + 0.66 * var(--bar-drive)) * var(--bar-gain)));
   }
 }
 
@@ -586,17 +622,17 @@
     transform: scaleY(0.12);
   }
   12% {
-    transform: scaleY(calc(0.3 + 0.34 * var(--bar-level)));
+    transform: scaleY(calc(0.3 + 0.34 * var(--bar-drive)));
   }
 }
 
 @keyframes eq-breathe {
   0%,
   100% {
-    transform: scale(calc(1 + 0.02 * var(--orb-level)));
+    transform: scale(var(--eq-disc-scale));
   }
   50% {
-    transform: scale(calc(1 + 0.02 * var(--orb-level) + 0.02 * var(--eq-breathe)));
+    transform: scale(calc(var(--eq-disc-scale) + 0.02 * var(--eq-breathe)));
   }
 }
 

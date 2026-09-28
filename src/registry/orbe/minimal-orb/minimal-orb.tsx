@@ -17,7 +17,7 @@ export const MinimalOrb = ({
   ref,
 }: OrbProps) => {
   const internalRef = useRef<HTMLDivElement | null>(null);
-  useOrbLevel(internalRef, state, levelRef);
+  useOrbLevel(internalRef, state, levelRef, undefined, speed);
   const setRef = useCallback(
     (node: HTMLDivElement | null) => {
       internalRef.current = node;
@@ -37,10 +37,12 @@ export const MinimalOrb = ({
       style={orbVars({ size, speed, colorFrom, colorTo })}
     >
       <span className={styles.shaker}>
+        <span className={styles.ring} />
         <span className={styles.disc}>
           <span className={styles.spin}>
             <span className={styles.spinTurbo} />
           </span>
+          <span className={styles.flow} />
         </span>
         <span className={styles.mark} />
       </span>

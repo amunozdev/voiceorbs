@@ -1,72 +1,49 @@
-import { ImageResponse } from "next/og";
+import { ImageResponse } from 'next/og';
+import { orbs } from '@/registry/registry';
+import { OG_BG, OG_SIZE, ogFonts, ogImage } from '@/og/og-assets';
 
-export const alt =
-  "VoiceOrbs, an open-source gallery of animated orbs for AI assistants";
-export const size = { width: 1200, height: 630 };
-export const contentType = "image/png";
+export const alt = 'VoiceOrbs: a Siri Sheet orb inside a status pill that reads Checking the database';
+export const size = OG_SIZE;
+export const contentType = 'image/png';
 
-export default function Image() {
+export default async function Image() {
+  const [fonts, pill] = await Promise.all([ogFonts(), ogImage('og/pill.png')]);
+
   return new ImageResponse(
     (
       <div
         style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 96,
-          backgroundColor: "#070811",
-          backgroundImage:
-            "linear-gradient(rgba(99,102,241,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,0.07) 1px, transparent 1px)",
-          backgroundSize: "56px 56px",
-          fontFamily: "sans-serif",
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 56px 0 88px',
+          backgroundColor: OG_BG,
+          fontFamily: 'Geist',
         }}
       >
-        <div
-          style={{
-            width: 340,
-            height: 340,
-            borderRadius: 340,
-            display: "flex",
-            backgroundImage:
-              "radial-gradient(circle at 32% 28%, #c7d2fe 0%, #818cf8 28%, #6366f1 52%, #22d3ee 88%, #0e7490 100%)",
-            boxShadow:
-              "0 0 120px 30px rgba(99,102,241,0.45), 0 0 260px 80px rgba(34,211,238,0.18)",
-          }}
-        />
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            maxWidth: 560,
-          }}
-        >
+        <div style={{ display: 'flex', flexDirection: 'column', maxWidth: 540 }}>
+          <div style={{ fontSize: 28, fontWeight: 600, color: '#9aa1c2' }}>VoiceOrbs</div>
           <div
             style={{
-              fontSize: 72,
-              fontWeight: 700,
-              color: "#f4f5fb",
-              lineHeight: 1.1,
-              letterSpacing: -2,
+              marginTop: 22,
+              fontSize: 70,
+              fontWeight: 600,
+              color: '#f4f5fb',
+              lineHeight: 1.02,
+              letterSpacing: -3,
             }}
           >
-            VoiceOrbs
+            Animated orbs for AI assistants
           </div>
-          <div
-            style={{
-              marginTop: 24,
-              fontSize: 32,
-              color: "#9aa1c2",
-              lineHeight: 1.4,
-            }}
-          >
-            Open-source copy-paste gallery of animated orbs for conversational
-            AI assistants
+          <div style={{ marginTop: 26, fontSize: 29, color: '#9aa1c2', lineHeight: 1.35 }}>
+            {`${orbs.length} copy-paste React orbs, now with status feedback for voice agents.`}
           </div>
         </div>
+        <img src={pill} width={560} height={245} alt="" />
       </div>
     ),
-    { ...size }
+    { ...size, fonts },
   );
 }

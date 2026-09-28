@@ -1,5 +1,7 @@
 import clsx from 'clsx';
 
+const GRID_COLS: Record<number, string> = { 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4' };
+
 interface SegmentOption {
   label: string;
   value: number;
@@ -21,7 +23,10 @@ export const SegmentedControl = ({
   <div
     role="group"
     aria-label={label}
-    className="flex w-fit flex-wrap items-center gap-0.5 rounded-md border border-border bg-panel p-0.5"
+    className={clsx(
+      'grid w-full gap-0.5 rounded-md border border-border bg-panel p-0.5 sm:flex sm:w-fit sm:flex-wrap sm:items-center',
+      GRID_COLS[Math.min(options.length, 4)] ?? 'grid-cols-4',
+    )}
   >
     {options.map((option) => {
       const active = value === option.value;

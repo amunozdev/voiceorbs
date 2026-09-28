@@ -96,6 +96,8 @@ const SECONDARY_BUTTON =
 
 const PILL_GROUP = 'flex w-fit flex-wrap items-center gap-0.5 rounded-md border border-border bg-panel p-0.5';
 
+const PILL_GRID = 'grid w-full gap-0.5 rounded-md border border-border bg-panel p-0.5 sm:flex sm:w-fit sm:flex-wrap sm:items-center';
+
 const Group = ({
   title,
   action,
@@ -407,7 +409,7 @@ ${usageFile.code}\`\`\``,
           </p>
         </div>
         <Field label="State">
-          <div role="group" aria-label="Conversation states" className={PILL_GROUP}>
+          <div role="group" aria-label="Conversation states" className={clsx(PILL_GRID, 'grid-cols-3')}>
             {ORB_STATES.map((s) => (
               <button
                 key={s}
@@ -450,7 +452,7 @@ ${usageFile.code}\`\`\``,
         )}
         <Disclosure label="Advanced">
           <Field label="Optional states">
-            <div role="group" aria-label="Optional states" className={PILL_GROUP}>
+            <div role="group" aria-label="Optional states" className={clsx(PILL_GRID, 'grid-cols-2')}>
               {SPECIAL_STATES.map((s) => (
                 <button
                   key={s}
@@ -529,7 +531,7 @@ ${usageFile.code}\`\`\``,
         <Group title="Get the code" level={groupLevel}>
           {hasTailwind && (
             <Field label="Styling">
-              <div role="group" aria-label="Styling variant" className={PILL_GROUP}>
+              <div role="group" aria-label="Styling variant" className={clsx(PILL_GRID, 'grid-cols-2')}>
                 {VARIANT_OPTIONS.map((option) => (
                   <button
                     key={option.value}

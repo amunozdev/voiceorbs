@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -14,6 +14,7 @@ import {
   type StateMix,
 } from '../../lib/orb-state';
 import { observeActivity } from '../../lib/use-in-view';
+import { useReducedMotion } from '../../lib/use-reduced-motion';
 
 const noiseGLSL = /* glsl */ `
 vec4 permute(vec4 x){ return mod(((x*34.0)+1.0)*x, 289.0); }
@@ -237,16 +238,6 @@ const smoothEnergy = (state: OrbState, t: number): number => {
   return range[0] + range[1] * u * u;
 };
 
-const subscribeReducedMotion = (onChange: () => void): (() => void) => {
-  const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-  query.addEventListener('change', onChange);
-  return () => query.removeEventListener('change', onChange);
-};
-
-const getReducedMotion = (): boolean => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-const getServerReducedMotion = (): boolean => false;
-
 interface SphereProps {
   state: OrbState;
   speed: number;
@@ -254,9 +245,10 @@ interface SphereProps {
   colorTo: string;
   reduced: boolean;
   levelRef?: RefObject<number>;
+  onReady?: () => void;
 }
 
-const Sphere = ({ state, speed, colorFrom, colorTo, reduced, levelRef }: SphereProps) => {
+const Sphere = ({ state, speed, colorFrom, colorTo, reduced, levelRef, onReady }: SphereProps) => {
   const matRef = useRef<THREE.ShaderMaterial>(null);
   const invalidate = useThree((three) => three.invalidate);
   const clock = useRef(0);
@@ -264,6 +256,7 @@ const Sphere = ({ state, speed, colorFrom, colorTo, reduced, levelRef }: SphereP
   const spin = useRef(0);
   const shimmer = useRef(0);
   const mixRef = useRef<StateMix | null>(null);
+  const readyRef = useRef(false);
   const palette = useRef({
     from: new THREE.Color(colorFrom),
     to: new THREE.Color(colorTo),
@@ -303,10 +296,12 @@ const Sphere = ({ state, speed, colorFrom, colorTo, reduced, levelRef }: SphereP
     if (!u) return;
     if (!mixRef.current) mixRef.current = createStateMix(state);
     const dt = Math.min(delta, 0.1);
-    if (!reduced) clock.current += dt * speed;
+    if (!reduced) clock.current += dt * Math.max(0, speed);
     const t = clock.current;
 
-    const weights = mixRef.current.update(state, reduced ? 1 : dt, reduced ? 1000 : 6);
+    const weights = reduced
+      ? mixRef.current.update(state, 1, 1000)
+      : mixRef.current.update(state, dt);
 
     let distort = 0;
     let freq = 0;
@@ -331,8 +326,8 @@ const Sphere = ({ state, speed, colorFrom, colorTo, reduced, levelRef }: SphereP
       smoothed.current = target;
     } else {
       smoothed.current = approach(smoothed.current, target, response, dt);
-      spin.current = (spin.current + dt * speed * (0.12 + 0.43 * weights.thinking)) % (Math.PI * 2);
-      shimmer.current = (shimmer.current + dt * speed * (9 + 24 * weights.listening)) % 1;
+      spin.current = (spin.current + dt * Math.max(0, speed) * (0.12 + 0.43 * weights.thinking)) % (Math.PI * 2);
+      shimmer.current = (shimmer.current + dt * Math.max(0, speed) * (9 + 24 * weights.listening)) % 1;
     }
 
     u.uTime.value = t;
@@ -346,6 +341,10 @@ const Sphere = ({ state, speed, colorFrom, colorTo, reduced, levelRef }: SphereP
     u.uShimmerPhase.value = shimmer.current;
     u.uColorFrom.value.copy(palette.current.from).lerp(palette.current.errorFrom, weights.error);
     u.uColorTo.value.copy(palette.current.to).lerp(palette.current.errorTo, weights.error);
+    if (!readyRef.current) {
+      readyRef.current = true;
+      onReady?.();
+    }
   });
 
   return (
@@ -367,11 +366,19 @@ export interface NebulaSceneProps {
   colorFrom: string;
   colorTo: string;
   levelRef?: RefObject<number>;
+  onReady?: () => void;
 }
 
-export const NebulaScene = ({ state, speed, colorFrom, colorTo, levelRef }: NebulaSceneProps) => {
+export const NebulaScene = ({
+  state,
+  speed,
+  colorFrom,
+  colorTo,
+  levelRef,
+  onReady,
+}: NebulaSceneProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const reduced = useSyncExternalStore(subscribeReducedMotion, getReducedMotion, getServerReducedMotion);
+  const reduced = useReducedMotion();
   const [active, setActive] = useState(true);
 
   useEffect(() => {
@@ -395,6 +402,7 @@ export const NebulaScene = ({ state, speed, colorFrom, colorTo, levelRef }: Nebu
         colorTo={colorTo}
         reduced={reduced}
         levelRef={levelRef}
+        onReady={onReady}
       />
     </Canvas>
   );

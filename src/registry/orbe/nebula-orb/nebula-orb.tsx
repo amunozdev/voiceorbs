@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useSyncExternalStore } from 'react';
+import { useCallback, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
   ERROR_COLOR_FROM,
@@ -9,6 +9,7 @@ import {
   type OrbProps,
   type OrbState,
 } from '../../lib/orb-state';
+import { useReducedMotion } from '../../lib/use-reduced-motion';
 import { useWebGLSupport } from '../../lib/use-webgl-support';
 
 const NebulaScene = dynamic(() => import('./nebula-scene').then((m) => m.NebulaScene), {
@@ -35,16 +36,6 @@ const CORE_SCALE: Record<OrbState, number> = {
   disabled: 0.9,
 };
 
-const subscribeReducedMotion = (onChange: () => void): (() => void) => {
-  const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-  query.addEventListener('change', onChange);
-  return () => query.removeEventListener('change', onChange);
-};
-
-const getReducedMotion = (): boolean => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-const getServerReducedMotion = (): boolean => false;
-
 const glowLayer = (
   from: string,
   to: string,
@@ -70,8 +61,11 @@ export const NebulaOrb = ({
   className,
   ref,
 }: OrbProps) => {
-  const reduced = useSyncExternalStore(subscribeReducedMotion, getReducedMotion, getServerReducedMotion);
+  const reduced = useReducedMotion();
   const webgl = useWebGLSupport();
+  const [ready, setReady] = useState(false);
+  const handleReady = useCallback(() => setReady(true), []);
+  const sceneShown = webgl === true && ready;
   const fade = reduced ? undefined : 'opacity 600ms ease';
   const glow = GLOW[state];
   const isError = state === 'error';
@@ -127,24 +121,36 @@ export const NebulaOrb = ({
           transition: fade,
         }}
       />
-      {webgl !== true && (
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: '10%',
+          borderRadius: '50%',
+          background:
+            'radial-gradient(circle at 36% 30%, color-mix(in srgb, var(--nebula-live-to) 62%, white) 0%, color-mix(in srgb, var(--nebula-live-to) 55%, var(--nebula-live-from)) 24%, var(--nebula-live-from) 60%, color-mix(in srgb, var(--nebula-live-from) 50%, black) 100%)',
+          opacity: sceneShown ? 0 : 0.55 + glow * 0.45,
+          transform: `scale(${CORE_SCALE[state]})`,
+          transition: reduced ? undefined : 'opacity 600ms ease, transform 600ms ease',
+        }}
+      />
+      {webgl === true && (
         <div
-          aria-hidden
           style={{
             position: 'absolute',
-            inset: '10%',
-            borderRadius: '50%',
-            background:
-              'radial-gradient(circle at 36% 30%, color-mix(in srgb, var(--nebula-live-to) 78%, white) 0%, var(--nebula-live-to) 32%, var(--nebula-live-from) 66%, color-mix(in srgb, var(--nebula-live-from) 55%, black) 100%)',
-            opacity: 0.55 + glow * 0.45,
-            transform: `scale(${CORE_SCALE[state]})`,
-            transition: reduced ? undefined : 'opacity 600ms ease, transform 600ms ease',
+            inset: 0,
+            opacity: ready ? 1 : 0,
+            transition: reduced ? undefined : 'opacity 500ms ease',
           }}
-        />
-      )}
-      {webgl === true && (
-        <div style={{ position: 'absolute', inset: 0 }}>
-          <NebulaScene state={state} speed={speed} colorFrom={colorFrom} colorTo={colorTo} levelRef={levelRef} />
+        >
+          <NebulaScene
+            state={state}
+            speed={speed}
+            colorFrom={colorFrom}
+            colorTo={colorTo}
+            levelRef={levelRef}
+            onReady={handleReady}
+          />
         </div>
       )}
     </div>

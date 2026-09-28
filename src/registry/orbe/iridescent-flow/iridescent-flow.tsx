@@ -4,17 +4,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
   approach,
-  createStateMix,
+  blendEnergy,
   ERROR_COLOR_FROM,
   ERROR_COLOR_TO,
   hexToRgb,
   orbVars,
-  stateEnergy,
   type OrbProps,
   type OrbState,
 } from '../../lib/orb-state';
-import { observeActivity } from '../../lib/use-in-view';
-import { useOrbLevel } from '../../lib/use-orb-level';
+import { useOrbAnimator } from '../../lib/use-orb-animator';
+import type { OrbFrame } from '../../lib/use-orb-animator';
 import { useWebGLSupport } from '../../lib/use-webgl-support';
 
 type Vec3 = [number, number, number];
@@ -30,6 +29,8 @@ const FLOW_RATE: Record<OrbState, number> = {
 };
 
 const STATE_KEYS = Object.keys(FLOW_RATE) as OrbState[];
+
+const TIME_OFFSET = 4.7;
 
 const toUnit = (hex: string): Vec3 => {
   const [r, g, b] = hexToRgb(hex);
@@ -110,17 +111,21 @@ void main() {
   float inter = sin(r * 24.0 - uTime * 3.1) * sin(r * 15.0 + uTime * 2.3);
   n += uThink * inter * (0.14 + 0.12 * uLevel);
 
-  float ripple = sin(r * 30.0 - uTime * 6.5);
+  float ripple = sin(r * 30.0 + uTime * 6.5);
   n += uListen * ripple * (0.05 + 0.2 * uLevel);
+
+  float emit = sin(r * 16.0 - uTime * 4.6);
+  n += uSpeak * emit * (0.04 + 0.16 * uLevel);
 
   n = clamp(n, 0.0, 1.0);
 
   float fres = pow(smoothstep(0.3, 0.9, r), 2.0);
 
-  float th = n * 1.7 + fres * 1.15 + uFlow * 0.1;
+  float th = n * 1.7 + fres * 1.15 + uFlow * 0.1 + 0.14 * uSpeak - 0.1 * uListen;
   vec3 film = 0.5 + 0.5 * cos(6.28318 * (th + vec3(0.0, 0.33, 0.67)));
 
-  vec3 base = mix(uColorFrom, uColorTo, smoothstep(0.15, 0.85, n));
+  float tone = clamp(smoothstep(0.15, 0.85, n) + 0.28 * uListen - 0.3 * uSpeak, 0.0, 1.0);
+  vec3 base = mix(uColorFrom, uColorTo, tone);
   float irid = clamp(0.4 + 0.35 * uSpeak + 0.18 * uListen + 0.3 * uLevel, 0.0, 1.0);
   irid *= 1.0 - 0.75 * uError;
   irid *= 1.0 - 0.7 * uDisabled;
@@ -134,6 +139,7 @@ void main() {
   col += mix(uColorTo, vec3(1.0), 0.55) * sweep * smoothstep(0.35, 0.85, r) * uConnect * 1.1;
 
   col *= 1.0 + uListen * 0.22 * max(ripple, 0.0) * (0.4 + 0.6 * uLevel);
+  col += mix(uColorFrom, vec3(1.0), 0.35) * uSpeak * max(emit, 0.0) * (1.0 - smoothstep(0.1, 0.8, r)) * (0.08 + 0.3 * uLevel);
   col *= 1.0 + uThink * (0.12 * sin(uTime * 4.2) + 0.1 * inter);
 
   vec3 rim = mix(uColorTo, vec3(1.0), 0.45);
@@ -169,6 +175,8 @@ const fallbackOpacity = (state: OrbState): number => {
   }
 };
 
+type Draw = (frame: OrbFrame) => void;
+
 export const IridescentFlow = ({
   state = 'idle',
   size = 168,
@@ -182,10 +190,9 @@ export const IridescentFlow = ({
 }: OrbProps) => {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stateRef = useRef(state);
-  const speedRef = useRef(speed);
+  const sizeRef = useRef(size);
   const colorRef = useRef({ from: colorFrom, to: colorTo });
-  const redrawRef = useRef<(() => void) | null>(null);
+  const drawRef = useRef<Draw | null>(null);
   const [lost, setLost] = useState(false);
   const support = useWebGLSupport();
   const showCanvas = support === true && !lost;
@@ -199,20 +206,23 @@ export const IridescentFlow = ({
     [ref],
   );
 
-  useEffect(() => {
-    stateRef.current = state;
-    speedRef.current = speed;
-    colorRef.current = { from: colorFrom, to: colorTo };
-    redrawRef.current?.();
-  });
+  const onFrame = useCallback((frame: OrbFrame) => {
+    hostRef.current?.style.setProperty('--orb-level', frame.level.toFixed(3));
+    drawRef.current?.(frame);
+  }, []);
 
-  useOrbLevel(hostRef, state, levelRef);
+  const { frameRef } = useOrbAnimator(hostRef, { state, levelRef, speed, onFrame });
+
+  useEffect(() => {
+    sizeRef.current = size;
+    colorRef.current = { from: colorFrom, to: colorTo };
+    drawRef.current?.(frameRef.current);
+  }, [size, colorFrom, colorTo, frameRef]);
 
   useEffect(() => {
     if (!showCanvas) return;
-    const host = hostRef.current;
     const canvas = canvasRef.current;
-    if (!host || !canvas) return;
+    if (!canvas) return;
     const gl = canvas.getContext('webgl', {
       alpha: true,
       antialias: false,
@@ -259,12 +269,6 @@ export const IridescentFlow = ({
     }
     gl.useProgram(program);
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const px = Math.max(1, Math.round(size * dpr));
-    canvas.width = px;
-    canvas.height = px;
-    gl.viewport(0, 0, px, px);
-
     const buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
@@ -286,7 +290,18 @@ export const IridescentFlow = ({
       error: gl.getUniformLocation(program, 'uError'),
       disabled: gl.getUniformLocation(program, 'uDisabled'),
     };
-    gl.uniform1f(loc.size, px);
+
+    let px = 0;
+    const ensureSize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const next = Math.max(1, Math.round(sizeRef.current * dpr));
+      if (next === px) return;
+      px = next;
+      canvas.width = px;
+      canvas.height = px;
+      gl.viewport(0, 0, px, px);
+      gl.uniform1f(loc.size, px);
+    };
 
     let paletteKey = '';
     let fromV: Vec3 = [1, 1, 1];
@@ -299,33 +314,25 @@ export const IridescentFlow = ({
       toV = toUnit(colorRef.current.to);
     };
 
-    const stateMix = createStateMix(stateRef.current);
-    let clock = 0;
+    const initial = frameRef.current;
     let flow = 0;
-    let levelS = 0;
-    let flowRate = FLOW_RATE[stateRef.current];
-    let raf = 0;
-    let last: number | null = null;
-    let running = false;
-    let inView = true;
+    let lastPhase = initial.phase;
+    let flowRate = 0;
+    for (const key of STATE_KEYS) flowRate += initial.weights[key] * FLOW_RATE[key];
 
-    const render = (dt: number, isStatic = false) => {
+    const draw: Draw = ({ dt, phase, weights: w, level, reduced }) => {
+      ensureSize();
       ensurePalette();
-      const st = stateRef.current;
-      const easeDt = isStatic ? 60 : dt;
-      const w = stateMix.update(st, easeDt);
-      const live = levelRef?.current;
-      const hasLive = typeof live === 'number' && live >= 0;
-      levelS = approach(levelS, hasLive ? live : stateEnergy(st, clock), 8, easeDt);
       let rateTarget = 0;
       for (const key of STATE_KEYS) rateTarget += w[key] * FLOW_RATE[key];
-      flowRate = approach(flowRate, rateTarget, 4, easeDt);
-      flow += dt * speedRef.current * flowRate;
+      flowRate = reduced ? rateTarget : approach(flowRate, rateTarget, 4, dt);
+      flow += Math.max(0, phase - lastPhase) * flowRate;
+      lastPhase = phase;
       const from = mix3(fromV, ERROR_FROM_V, w.error);
       const to = mix3(toV, ERROR_TO_V, w.error);
-      gl.uniform1f(loc.time, clock);
+      gl.uniform1f(loc.time, phase + TIME_OFFSET);
       gl.uniform1f(loc.flow, flow);
-      gl.uniform1f(loc.level, levelS);
+      gl.uniform1f(loc.level, reduced ? blendEnergy(w, TIME_OFFSET) : level);
       gl.uniform3f(loc.colorFrom, from[0], from[1], from[2]);
       gl.uniform3f(loc.colorTo, to[0], to[1], to[2]);
       gl.uniform1f(loc.connect, w.connecting);
@@ -337,68 +344,23 @@ export const IridescentFlow = ({
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     };
 
-    const frame = (now: number) => {
-      if (last === null) last = now;
-      const dt = Math.min((now - last) / 1000, 0.1);
-      last = now;
-      clock += dt * speedRef.current;
-      render(dt);
-      raf = requestAnimationFrame(frame);
-    };
-
-    const renderStatic = () => {
-      if (clock === 0) clock = 4.7;
-      render(0, true);
-    };
-
-    const startLoop = () => {
-      if (running) return;
-      running = true;
-      last = null;
-      raf = requestAnimationFrame(frame);
-    };
-
-    const stopLoop = () => {
-      running = false;
-      cancelAnimationFrame(raf);
-    };
-
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const applyMotion = () => {
-      if (mq.matches || !inView) {
-        stopLoop();
-        if (mq.matches) renderStatic();
-      } else {
-        startLoop();
-      }
-    };
-    applyMotion();
-    mq.addEventListener('change', applyMotion);
-    const unobserve = observeActivity(host, (active) => {
-      inView = active;
-      applyMotion();
-    });
-    redrawRef.current = () => {
-      if (!running) renderStatic();
-    };
+    drawRef.current = draw;
+    draw(initial);
 
     const onLost = (event: Event) => {
       event.preventDefault();
-      stopLoop();
+      drawRef.current = null;
       setLost(true);
     };
     canvas.addEventListener('webglcontextlost', onLost);
 
     return () => {
-      stopLoop();
-      mq.removeEventListener('change', applyMotion);
-      unobserve();
       canvas.removeEventListener('webglcontextlost', onLost);
-      redrawRef.current = null;
+      drawRef.current = null;
       gl.deleteBuffer(buffer);
       dropResources();
     };
-  }, [size, showCanvas, levelRef]);
+  }, [showCanvas, frameRef]);
 
   const isError = state === 'error';
   const fallbackLayer = (from: string, to: string): CSSProperties => ({

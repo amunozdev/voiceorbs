@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { ArrowLeftIcon } from '@/components/orb-icons';
 import { RecipeCard } from './recipe-card';
-import { recipes } from './recipes';
+import { recipes, START_RECIPE_ID } from './recipes';
 
 export const metadata: Metadata = {
   title: 'Recipes | VoiceOrbs',
@@ -11,12 +12,13 @@ export const metadata: Metadata = {
 
 const RecipesPage = () => (
   <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-5 sm:py-16">
-    <header className="mb-12 max-w-2xl">
+    <header className="mb-8 max-w-2xl">
       <Link
         href="/"
-        className="mb-4 inline-block text-sm text-muted transition-colors hover:text-accent-foreground"
+        className="mb-4 inline-flex min-h-10 items-center gap-1.5 text-sm text-muted transition-colors hover:text-accent-foreground"
       >
-        &larr; Back to the gallery
+        <ArrowLeftIcon />
+        Back to the gallery
       </Link>
       <h1 className="text-balance text-3xl font-bold tracking-tight sm:text-5xl">
         Integration recipes
@@ -34,9 +36,32 @@ const RecipesPage = () => (
       </p>
     </header>
 
+    <nav
+      aria-label="Jump to a recipe"
+      className="sticky top-14 z-30 -mx-4 mb-8 border-b border-border bg-background/80 px-4 py-2.5 backdrop-blur sm:-mx-5 sm:px-5"
+    >
+      <ul className="flex gap-1.5 overflow-x-auto">
+        {recipes.map((recipe) => (
+          <li key={recipe.id} className="shrink-0">
+            <a
+              href={`#${recipe.id}`}
+              className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border px-3 text-xs text-muted transition-colors hover:border-accent hover:text-foreground sm:min-h-8"
+            >
+              {recipe.name}
+              {recipe.id === START_RECIPE_ID && (
+                <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground">
+                  Start here
+                </span>
+              )}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+
     <div className="flex flex-col gap-10">
       {recipes.map((recipe) => (
-        <RecipeCard key={recipe.id} recipe={recipe} />
+        <RecipeCard key={recipe.id} recipe={recipe} start={recipe.id === START_RECIPE_ID} />
       ))}
     </div>
   </main>

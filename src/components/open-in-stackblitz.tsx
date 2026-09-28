@@ -177,7 +177,7 @@ export const OpenInStackblitz = ({
       type="button"
       onClick={open}
       title="Open a Vite + React sandbox on StackBlitz with this orb and the current configuration"
-      className="rounded-md border border-border bg-panel px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-accent hover:text-accent-foreground"
+      className="inline-flex min-h-10 items-center rounded-md border border-border bg-panel px-3 text-xs font-medium sm:min-h-8 text-foreground transition-colors hover:border-accent hover:text-accent-foreground"
     >
       Open in StackBlitz
     </button>

@@ -1,6 +1,7 @@
 'use client';
 
 import clsx from 'clsx';
+import { techInfo } from './tech-info';
 
 const FilterChip = ({
   label,
@@ -16,7 +17,7 @@ const FilterChip = ({
     onClick={onToggle}
     aria-pressed={active}
     className={clsx(
-      'inline-flex min-h-[40px] items-center rounded-full border px-3 py-2 text-xs transition-colors sm:min-h-0 sm:px-2.5 sm:py-1',
+      'inline-flex min-h-10 items-center rounded-full border px-3 text-xs transition-colors sm:min-h-8',
       active
         ? 'border-accent bg-accent/15 text-accent-foreground'
         : 'border-border text-muted hover:border-accent hover:text-foreground',
@@ -36,6 +37,8 @@ export const GalleryFilters = ({
   onToggleZeroDeps,
   tailwind,
   onToggleTailwind,
+  filtersActive,
+  onClear,
   count,
   total,
 }: {
@@ -48,6 +51,8 @@ export const GalleryFilters = ({
   onToggleZeroDeps: () => void;
   tailwind: boolean;
   onToggleTailwind: () => void;
+  filtersActive: boolean;
+  onClear: () => void;
   count: number;
   total: number;
 }) => (
@@ -62,24 +67,46 @@ export const GalleryFilters = ({
         value={query}
         onChange={(e) => onQueryChange(e.target.value)}
         placeholder="Search orbs by name or tagline"
-        className="w-full max-w-xs rounded-md border border-border bg-panel px-3 py-2 text-sm text-foreground transition-colors placeholder:text-muted focus:border-accent focus:outline-none sm:py-1.5"
+        className="min-h-10 w-full max-w-xs rounded-md border border-border bg-panel px-3 text-sm text-foreground transition-colors placeholder:text-muted focus:border-accent focus:outline-none"
       />
-      <p role="status" className="text-xs text-muted">
+      <p role="status" className="text-xs text-muted tabular-nums">
         {count} of {total} orbs
       </p>
+      {filtersActive && (
+        <button
+          type="button"
+          onClick={onClear}
+          className="inline-flex min-h-10 items-center rounded-md px-2 text-xs font-medium text-accent-foreground underline-offset-4 transition-colors hover:underline sm:min-h-8"
+        >
+          Clear filters
+        </button>
+      )}
     </div>
-    <div role="group" aria-label="Filter orbs" className="flex flex-wrap items-center gap-1.5">
-      {techOptions.map((tech) => (
-        <FilterChip
-          key={tech}
-          label={tech}
-          active={activeTechs.includes(tech)}
-          onToggle={() => onToggleTech(tech)}
-        />
-      ))}
-      <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-border" />
-      <FilterChip label="Zero deps" active={zeroDeps} onToggle={onToggleZeroDeps} />
-      <FilterChip label="Tailwind variant" active={tailwind} onToggle={onToggleTailwind} />
+    <div className="flex flex-wrap items-center gap-1.5">
+      <div
+        role="group"
+        aria-label="Rendering cost"
+        aria-describedby="tech-filter-help"
+        className="flex flex-wrap items-center gap-1.5"
+      >
+        {techOptions.map((tech) => (
+          <FilterChip
+            key={tech}
+            label={techInfo(tech).label}
+            active={activeTechs.includes(tech)}
+            onToggle={() => onToggleTech(tech)}
+          />
+        ))}
+      </div>
+      <span aria-hidden="true" className="mx-0.5 hidden h-4 w-px bg-border sm:block" />
+      <div role="group" aria-label="Setup" className="flex flex-wrap items-center gap-1.5">
+        <FilterChip label="Zero deps" active={zeroDeps} onToggle={onToggleZeroDeps} />
+        <FilterChip label="Tailwind variant" active={tailwind} onToggle={onToggleTailwind} />
+      </div>
     </div>
+    <p id="tech-filter-help" className="text-xs text-muted">
+      Ordered lightest to heaviest. CSS orbs run on the compositor and are safe on any phone; GPU
+      shaders and 3D WebGL look richest but cost more battery.
+    </p>
   </div>
 );

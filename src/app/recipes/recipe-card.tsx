@@ -3,12 +3,13 @@ import type { Recipe } from './recipes';
 
 interface RecipeCardProps {
   recipe: Recipe;
+  start?: boolean;
 }
 
-export const RecipeCard = ({ recipe }: RecipeCardProps) => (
+export const RecipeCard = ({ recipe, start = false }: RecipeCardProps) => (
   <article
     id={recipe.id}
-    className="scroll-mt-20 overflow-hidden rounded-xl border border-border bg-panel"
+    className="scroll-mt-32 overflow-hidden rounded-xl border border-border bg-panel"
   >
     <div className="flex flex-col gap-2.5 p-5">
       <div className="flex flex-wrap items-center gap-3">
@@ -16,6 +17,11 @@ export const RecipeCard = ({ recipe }: RecipeCardProps) => (
         <span className="rounded-full border border-border px-2.5 py-0.5 font-mono text-xs text-muted">
           {recipe.badge}
         </span>
+        {start && (
+          <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-medium text-accent-foreground">
+            Start here
+          </span>
+        )}
       </div>
       <p className="max-w-3xl text-sm leading-relaxed text-muted">{recipe.intro}</p>
       {recipe.adapterPath ? (

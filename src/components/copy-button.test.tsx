@@ -32,9 +32,10 @@ describe('CopyButton', () => {
     render(<CopyButton value="npx create-orb" />);
     await user.click(screen.getByRole('button', { name: 'Copy' }));
     expect(writeText).toHaveBeenCalledWith('npx create-orb');
-    const status = await screen.findByRole('status');
-    expect(status.textContent).toBe('✓ Copied');
+    const status = screen.getByRole('status');
+    await vi.waitFor(() => expect(status.textContent).toBe('Copied'));
     expect(status.getAttribute('aria-live')).toBe('polite');
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeDefined();
   });
 
   it('announces the failure when the clipboard write is rejected', async () => {
@@ -44,6 +45,7 @@ describe('CopyButton', () => {
     render(<CopyButton value="secret" />);
     await user.click(screen.getByRole('button'));
     expect(await screen.findByText('Copy failed')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeDefined();
   });
 
   it('merges a custom className', () => {

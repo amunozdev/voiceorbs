@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeColorSync } from "@/components/theme-color-sync";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
+import { orbs } from "@/registry/registry";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,7 +21,7 @@ const siteUrl = "https://voiceorbs.vercel.app";
 const siteName = "VoiceOrbs";
 const siteTitle = "VoiceOrbs | Animated orbs for AI assistants";
 const siteDescription =
-  "Open-source copy-paste gallery of animated orbs for conversational AI assistants.";
+  `${orbs.length} copy-paste React orbs that show what your voice agent is doing, now with a status pill for agent feedback.`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

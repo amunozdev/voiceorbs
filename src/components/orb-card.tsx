@@ -450,7 +450,7 @@ ${usageFile.code}\`\`\``,
             </p>
           </Field>
         )}
-        <Disclosure label="Advanced">
+        <>
           <Field label="Optional states">
             <div role="group" aria-label="Optional states" className={clsx(PILL_GRID, 'grid-cols-2')}>
               {SPECIAL_STATES.map((s) => (
@@ -480,7 +480,7 @@ ${usageFile.code}\`\`\``,
               Subtle sounds (and haptics where supported) on state changes.
             </span>
           </div>
-        </Disclosure>
+        </>
       </Group>
 
       <div className="grid gap-6 border-t border-border pt-6 md:grid-cols-2 md:gap-8">

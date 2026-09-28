@@ -261,6 +261,14 @@
   background: light-dark(rgb(255 255 255 / 0.72), rgb(10 12 20 / 0.78));
 }
 
+.demoLabel {
+  font-size: clamp(11px, calc(var(--orb-size) * 0.085), 17px);
+  letter-spacing: 0.02em;
+  color: light-dark(rgb(30 41 59 / 0.75), rgb(226 232 240 / 0.8));
+  opacity: var(--orb-label-opacity, 1);
+  transition: opacity 0.3s ease;
+}
+
 @keyframes edgeSpin {
   to {
     --edge-angle: 360deg;

@@ -59,7 +59,12 @@ export const EdgeGlow = ({
       <span aria-hidden className={styles.sweep} />
       <span aria-hidden className={styles.chase} />
       <div className={hasChildren ? styles.content : `${styles.content} ${styles.demo}`}>
-        {children}
+        {children ??
+          (size >= 96 ? (
+            <span aria-hidden className={styles.demoLabel}>
+              Your UI here
+            </span>
+          ) : null)}
       </div>
     </div>
   );

@@ -54,7 +54,8 @@ export const OrbMorphStage = ({
   const scale = Math.min(1, (PILL_ORB * orbScale) / size);
   const textLeft = -pillWidth / 2 + PILL_PAD + PILL_ORB + PILL_GAP;
 
-  const orbStyle: CSSProperties = {
+  const orbStyle: CSSProperties & Record<'--orb-label-opacity', number> = {
+    '--orb-label-opacity': feedback ? 0 : 1,
     transform: feedback ? `translate3d(${orbOffset}px, 0, 0) scale(${scale})` : 'translate3d(0, 0, 0) scale(1)',
     transition: `transform ${feedback ? '0.7s' : '0.75s'} ${EASE} ${feedback ? '0s' : '0.12s'}`,
   };

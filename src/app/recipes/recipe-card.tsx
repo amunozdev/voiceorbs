@@ -1,4 +1,4 @@
-import { CopyButton } from '@/components/copy-button';
+import { CodePane } from '@/components/code-pane';
 import type { Recipe } from './recipes';
 
 interface RecipeCardProps {
@@ -34,13 +34,6 @@ export const RecipeCard = ({ recipe, start = false }: RecipeCardProps) => (
         </p>
       ) : null}
     </div>
-    <div className="relative border-t border-code-border bg-code">
-      <div className="absolute right-2 top-2 z-10">
-        <CopyButton value={recipe.code} label="Copy recipe" />
-      </div>
-      <pre className="max-h-96 overflow-auto p-4 font-mono text-xs leading-relaxed text-code-foreground">
-        {recipe.code}
-      </pre>
-    </div>
+    <CodePane code={recipe.code} copyLabel="Copy recipe" flush preClassName="max-h-96" />
   </article>
 );

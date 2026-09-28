@@ -19,6 +19,10 @@ const AURORA_TW_CSS = `
 @property --atw-glow { syntax: '<color>'; inherits: true; initial-value: #22d3ee; }
 @property --atw-pulse { syntax: '<number>'; inherits: false; initial-value: 0; }
 @property --atw-pulse-mix { syntax: '<number>'; inherits: true; initial-value: 0; }
+@property --atw-pulse-slow { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --atw-think-mix { syntax: '<number>'; inherits: true; initial-value: 0; }
+@property --atw-listen { syntax: '<number>'; inherits: true; initial-value: 0; }
+@property --atw-speak { syntax: '<number>'; inherits: true; initial-value: 0; }
 [data-aurora-orb-tw] {
   --atw-sky-hi: #16223c;
   --atw-sky-top: #0d1526;
@@ -30,26 +34,31 @@ const AURORA_TW_CSS = `
   --atw-pink: color-mix(in oklab, var(--orb-color-to), #f472b6 42%);
   --atw-glow: color-mix(in oklab, var(--atw-green), var(--atw-cyan) 40%);
   --atw-pulse-mix: 0;
+  --atw-think-mix: 0;
+  --atw-listen: 0;
+  --atw-speak: 0;
+  --orb-dur: 0.2s;
+  --orb-ease: cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow:
     0 22px 44px -20px rgb(8 12 26 / 0.5),
     0 6px 18px -8px rgb(10 16 32 / 0.32);
-  transform: scale(calc(1 + 0.035 * var(--orb-bass, 0)));
-  transition:
-    --atw-sky-hi 0.4s ease,
-    --atw-sky-top 0.4s ease,
-    --atw-sky-mid 0.4s ease,
-    --atw-sky-low 0.4s ease,
-    --atw-hi 0.4s ease,
-    --atw-green 0.4s ease,
-    --atw-cyan 0.4s ease,
-    --atw-pink 0.4s ease,
-    --atw-glow 0.4s ease,
-    --atw-pulse-mix 0.45s ease,
-    filter 0.3s ease,
-    opacity 0.3s ease;
+  transform: scale(calc(1 + (0.012 + 0.05 * var(--atw-listen)) * var(--orb-bass, 0)));
+  transition-property:
+    --atw-sky-hi, --atw-sky-top, --atw-sky-mid, --atw-sky-low, --atw-hi, --atw-green, --atw-cyan,
+    --atw-pink, --atw-glow, --atw-pulse-mix, --atw-think-mix, --atw-listen, --atw-speak, filter,
+    opacity;
+  transition-duration: var(--orb-dur);
+  transition-timing-function: var(--orb-ease);
+}
+[data-aurora-orb-tw]:is([data-state='idle'], [data-state='disabled']) {
+  --orb-dur: 0.6s;
+  --orb-ease: cubic-bezier(0.65, 0, 0.35, 1);
 }
 [data-aurora-orb-tw][data-state='connecting'] { --atw-pulse-mix: 1; }
+[data-aurora-orb-tw][data-state='listening'] { --atw-listen: 1; }
+[data-aurora-orb-tw][data-state='speaking'] { --atw-speak: 1; }
 [data-aurora-orb-tw][data-state='thinking'] {
+  --atw-think-mix: 1;
   --atw-green: color-mix(in oklab, var(--orb-color-to), var(--orb-color-from) 32%);
   --atw-pink: color-mix(in oklab, var(--orb-color-to), #f472b6 45%);
   --atw-glow: color-mix(in oklab, var(--orb-color-to), var(--orb-color-from) 25%);
@@ -71,8 +80,16 @@ const AURORA_TW_CSS = `
 }
 [data-aurora-orb-tw] [data-halo] {
   background: radial-gradient(closest-side, transparent 58%, var(--atw-glow) 71%, transparent 92%);
-  opacity: calc(0.16 + 0.22 * var(--orb-level, 0) + 0.16 * var(--orb-bass, 0));
-  transform: scale(calc(1 + 0.02 * var(--orb-level, 0) + 0.05 * var(--orb-bass, 0)));
+  opacity: calc(
+    0.16 + (0.1 + 0.3 * var(--atw-listen)) * var(--orb-level, 0) +
+      (0.06 + 0.22 * var(--atw-listen)) * var(--orb-bass, 0)
+  );
+  transform: scale(
+    calc(
+      1 + (0.01 + 0.03 * var(--atw-listen)) * var(--orb-level, 0) +
+        (0.02 + 0.07 * var(--atw-listen)) * var(--orb-bass, 0)
+    )
+  );
 }
 [data-aurora-orb-tw] [data-sky] {
   background-image:
@@ -130,7 +147,10 @@ const AURORA_TW_CSS = `
 }
 [data-aurora-orb-tw] [data-veil='mid'] {
   filter: blur(14px);
-  opacity: calc(0.5 + 0.16 * var(--orb-level, 0) + 0.18 * var(--orb-treble, 0));
+  opacity: calc(
+    0.5 + (0.08 + 0.18 * var(--atw-speak)) * var(--orb-level, 0) +
+      (0.06 + 0.26 * var(--atw-speak)) * var(--orb-treble, 0)
+  );
   -webkit-mask-image: linear-gradient(to bottom, black 18%, transparent 76%);
   mask-image: linear-gradient(to bottom, black 18%, transparent 76%);
   animation: aurora-orb-tw-sway-b calc(13.3s / var(--orb-speed, 1)) ease-in-out -4.1s infinite;
@@ -156,14 +176,19 @@ const AURORA_TW_CSS = `
 [data-aurora-orb-tw] [data-veil='front'] {
   filter: blur(8px);
   opacity: calc(
-    (0.08 + 0.46 * var(--orb-level, 0) + 0.46 * var(--orb-treble, 0)) * (1 - var(--atw-pulse-mix)) +
-      (0.06 + 0.44 * var(--atw-pulse)) * var(--atw-pulse-mix)
+    (
+        0.08 + (0.2 + 0.4 * var(--atw-speak)) * var(--orb-level, 0) +
+          (0.16 + 0.44 * var(--atw-speak)) * var(--orb-treble, 0)
+      ) *
+      (1 - var(--atw-pulse-mix) - var(--atw-think-mix)) +
+      (0.06 + 0.44 * var(--atw-pulse-slow)) * var(--atw-pulse-mix) +
+      (0.14 + 0.5 * var(--atw-pulse)) * var(--atw-think-mix)
   );
   -webkit-mask-image: linear-gradient(to bottom, black 10%, black 34%, transparent 66%);
   mask-image: linear-gradient(to bottom, black 10%, black 34%, transparent 66%);
   animation:
     aurora-orb-tw-sway-c calc(9.7s / var(--orb-speed, 1)) ease-in-out -2.9s infinite,
-    aurora-orb-tw-pulse calc(2.3s / var(--orb-speed, 1)) ease-in-out infinite;
+    aurora-orb-tw-pulse calc(4.6s / var(--orb-speed, 1)) ease-in-out infinite;
 }
 [data-aurora-orb-tw] [data-drift='front'] {
   left: 0;
@@ -225,8 +250,10 @@ const AURORA_TW_CSS = `
   71% { transform: translate3d(-1.8%, -0.3%, 0) skewX(-8.5deg) rotate(-0.8deg) scaleY(1.05); }
 }
 @keyframes aurora-orb-tw-pulse {
-  0%, 100% { --atw-pulse: 0; }
-  55% { --atw-pulse: 1; }
+  0%, 100% { --atw-pulse: 0; --atw-pulse-slow: 0; }
+  27.5%, 77.5% { --atw-pulse: 1; }
+  50% { --atw-pulse: 0; }
+  55% { --atw-pulse-slow: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
   [data-aurora-orb-tw],
@@ -281,7 +308,7 @@ export const AuroraOrbTw = ({
     },
     [ref],
   );
-  useOrbLevel(innerRef, state, levelRef);
+  useOrbLevel(innerRef, state, levelRef, undefined, speed);
 
   return (
     <div

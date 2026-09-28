@@ -52,15 +52,18 @@
   width: var(--orb-size);
   height: var(--orb-size);
   isolation: isolate;
-  transition:
-    opacity 0.3s ease,
-    filter 0.3s ease,
-    --pulse-from 0.35s ease,
-    --pulse-to 0.35s ease,
-    --pulse-glow 0.35s ease,
-    --pulse-breathe-idle 0.45s ease,
-    --pulse-breathe-think 0.45s ease,
-    --pulse-blink 0.3s ease;
+  --orb-dur: 0.2s;
+  --orb-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  transition-property:
+    opacity, filter, --pulse-from, --pulse-to, --pulse-glow, --pulse-breathe-idle,
+    --pulse-breathe-think, --pulse-blink;
+  transition-duration: var(--orb-dur);
+  transition-timing-function: var(--orb-ease);
+}
+
+.orb:is([data-state='idle'], [data-state='disabled']) {
+  --orb-dur: 0.6s;
+  --orb-ease: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 .orb[data-state='idle'] {
@@ -153,7 +156,7 @@
   animation:
     breatheIdle calc(4s / var(--orb-speed)) ease-in-out infinite,
     blink calc(1.8s / var(--orb-speed)) ease-in-out infinite;
-  transition: filter 0.35s ease;
+  transition: filter var(--orb-dur) var(--orb-ease);
   will-change: transform;
 }
 
@@ -185,12 +188,16 @@
 }
 
 .ringSet {
+  --ring-play: paused;
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition-property: opacity, --ring-play;
+  transition-duration: var(--orb-dur), var(--orb-dur);
+  transition-timing-function: var(--orb-ease), step-end;
+  transition-behavior: normal, allow-discrete;
 }
 
 .ringSetIdle {
@@ -210,12 +217,16 @@
   opacity: 0.45;
 }
 
-.orb[data-state='listening'] .ringSetListen {
+.orb[data-state='listening'] .ringSetListen,
+.orb[data-state='speaking'] .ringSetSpeak {
   opacity: 1;
 }
 
+.orb[data-state='idle'] .ringSetIdle,
+.orb[data-state='listening'] .ringSetListen,
 .orb[data-state='speaking'] .ringSetSpeak {
-  opacity: 1;
+  --ring-play: running;
+  transition-duration: var(--orb-dur), 0s;
 }
 
 .ring {
@@ -231,6 +242,7 @@
   animation-delay: calc(var(--ring-delay) * var(--set-time, 1) / var(--orb-speed));
   animation-iteration-count: infinite;
   animation-direction: var(--set-dir, normal);
+  animation-play-state: var(--ring-play, running);
 }
 
 .ring1 {
@@ -259,7 +271,7 @@
   width: 54%;
   height: 54%;
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity var(--orb-dur) var(--orb-ease);
 }
 
 .orb[data-state='connecting'] .arc {

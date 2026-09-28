@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef } from 'react';
-import { approach, orbVars, stateEnergy, type OrbProps, type OrbState } from '../../lib/orb-state';
-import { observeActivity } from '../../lib/use-in-view';
+import { orbVars, type OrbProps, type OrbState } from '../../lib/orb-state';
+import { useOrbLevel } from '../../lib/use-orb-level';
+import { useReducedMotion } from '../../lib/use-reduced-motion';
 import styles from './glass-orb.module.css';
 
 const REDUCED_LEVELS: Record<OrbState, number> = {
@@ -27,7 +28,6 @@ export const GlassOrb = ({
   ref,
 }: OrbProps) => {
   const innerRef = useRef<HTMLDivElement>(null);
-  const stateRef = useRef(state);
 
   const setRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -38,60 +38,13 @@ export const GlassOrb = ({
     [ref],
   );
 
-  useEffect(() => {
-    stateRef.current = state;
-  });
+  useOrbLevel(innerRef, state, levelRef, undefined, speed);
+  const reduced = useReducedMotion();
 
   useEffect(() => {
-    const el = innerRef.current;
-    if (!el) return;
-    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    el.style.setProperty('--orb-level', REDUCED_LEVELS[state].toFixed(3));
-  }, [state]);
-
-  useEffect(() => {
-    const el = innerRef.current;
-    if (!el) return;
-
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-    let raf = 0;
-    let running = false;
-    let start: number | null = null;
-    let last: number | null = null;
-    let smoothed = 0;
-
-    const frame = (now: number) => {
-      if (start === null) start = now;
-      const dt = last === null ? 1 / 60 : Math.min((now - last) / 1000, 0.1);
-      last = now;
-      const t = (now - start) / 1000;
-      const live = levelRef?.current;
-      const hasLive = typeof live === 'number' && live >= 0;
-      const target = hasLive ? live : stateEnergy(stateRef.current, t);
-      smoothed = approach(smoothed, target, 7.7, dt);
-      el.style.setProperty('--orb-level', smoothed.toFixed(3));
-      raf = requestAnimationFrame(frame);
-    };
-
-    const setActive = (active: boolean) => {
-      if (active === running) return;
-      running = active;
-      if (active) {
-        last = null;
-        raf = requestAnimationFrame(frame);
-      } else {
-        cancelAnimationFrame(raf);
-      }
-    };
-
-    setActive(true);
-    const unobserve = observeActivity(el, setActive);
-    return () => {
-      unobserve();
-      cancelAnimationFrame(raf);
-    };
-  }, [levelRef]);
+    if (!reduced) return;
+    innerRef.current?.style.setProperty('--orb-level', REDUCED_LEVELS[state].toFixed(3));
+  }, [reduced, state]);
 
   return (
     <div

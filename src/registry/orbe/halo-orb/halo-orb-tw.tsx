@@ -13,6 +13,8 @@ const HALO_TW_CSS = `
 @property --htw-to { syntax: '<color>'; inherits: true; initial-value: #f472b6; }
 @property --htw-breathe { syntax: '<number>'; inherits: false; initial-value: 0; }
 @property --htw-breathe-amp { syntax: '<number>'; inherits: true; initial-value: 0; }
+@property --htw-flicker { syntax: '<number>'; inherits: true; initial-value: 0; }
+@property --htw-flick { syntax: '<number>'; inherits: false; initial-value: 0; }
 @property --htw-spark-lo { syntax: '<number>'; inherits: true; initial-value: 0.25; }
 @property --htw-spark-hi { syntax: '<number>'; inherits: true; initial-value: 0.75; }
 [data-halo-orb-tw] {
@@ -21,16 +23,20 @@ const HALO_TW_CSS = `
   --htw-breathe-amp: 0;
   --htw-spark-lo: 0.25;
   --htw-spark-hi: 0.75;
+  --htw-flicker: 0;
+  --orb-dur: 0.2s;
+  --orb-ease: cubic-bezier(0.16, 1, 0.3, 1);
   perspective: calc(var(--orb-size) * 4.5);
   transform-style: preserve-3d;
-  transition:
-    --htw-from 0.45s ease,
-    --htw-to 0.45s ease,
-    --htw-breathe-amp 0.6s ease,
-    --htw-spark-lo 0.4s ease,
-    --htw-spark-hi 0.4s ease,
-    filter 0.45s ease,
-    opacity 0.45s ease;
+  transition-property:
+    --htw-from, --htw-to, --htw-breathe-amp, --htw-spark-lo, --htw-spark-hi, --htw-flicker,
+    filter, opacity;
+  transition-duration: var(--orb-dur);
+  transition-timing-function: var(--orb-ease);
+}
+[data-halo-orb-tw]:is([data-state='idle'], [data-state='disabled']) {
+  --orb-dur: 0.6s;
+  --orb-ease: cubic-bezier(0.65, 0, 0.35, 1);
 }
 [data-halo-orb-tw] [data-edge] {
   border: 1px solid color-mix(in oklab, var(--htw-from), black 18%);
@@ -117,11 +123,14 @@ const HALO_TW_CSS = `
     0 0 calc(var(--orb-size) * 0.055) color-mix(in oklab, var(--htw-to), transparent 35%),
     0 0 calc(var(--orb-size) * 0.16) calc(var(--orb-size) * 0.02) color-mix(in oklab, var(--htw-from), transparent 55%);
   transform: scale(calc(1 + 0.1 * var(--orb-level, 0) + 0.045 * var(--htw-breathe) * var(--htw-breathe-amp)));
-  animation: htw-breathe calc(5.2s / var(--orb-speed, 1)) ease-in-out infinite;
+  opacity: calc(1 - 0.45 * var(--htw-flick) * var(--htw-flicker));
+  animation:
+    htw-breathe calc(5.2s / var(--orb-speed, 1)) ease-in-out infinite,
+    htw-flicker calc(0.9s / var(--orb-speed, 1)) steps(2, jump-none) infinite;
 }
 [data-halo-orb-tw] [data-orbit] {
   opacity: 0.7;
-  transition: opacity 0.4s ease;
+  transition: opacity var(--orb-dur) var(--orb-ease);
 }
 [data-halo-orb-tw] [data-orbit='a'] {
   transform: rotateZ(18deg) rotateX(64deg);
@@ -215,11 +224,7 @@ const HALO_TW_CSS = `
 [data-halo-orb-tw][data-state='error'] {
   --htw-from: #fb7185;
   --htw-to: #f43f5e;
-}
-[data-halo-orb-tw][data-state='error'] [data-core] {
-  animation:
-    htw-breathe calc(5.2s / var(--orb-speed, 1)) ease-in-out infinite,
-    htw-flicker calc(0.9s / var(--orb-speed, 1)) steps(2, jump-none) infinite;
+  --htw-flicker: 1;
 }
 [data-halo-orb-tw][data-state='error'] [data-halo='b'] {
   animation-play-state: running, paused, paused, running;
@@ -252,8 +257,8 @@ const HALO_TW_CSS = `
   50% { --htw-breathe: 1; }
 }
 @keyframes htw-flicker {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
+  0%, 100% { --htw-flick: 0; }
+  50% { --htw-flick: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
   [data-halo-orb-tw][data-state] [data-glow],
@@ -357,7 +362,7 @@ export const HaloOrbTw = ({
     [refProp],
   );
 
-  useOrbLevel(innerRef, state, levelRef);
+  useOrbLevel(innerRef, state, levelRef, undefined, speed);
 
   return (
     <div

@@ -5,13 +5,12 @@ import clsx from 'clsx';
 import {
   ERROR_COLOR_FROM,
   ERROR_COLOR_TO,
-  approach,
   orbVars,
-  stateEnergy,
   type OrbProps,
   type OrbState,
 } from '../../lib/orb-state';
-import { observeActivity } from '../../lib/use-in-view';
+import { useOrbLevel } from '../../lib/use-orb-level';
+import { useReducedMotion } from '../../lib/use-reduced-motion';
 
 const GLASS_ORB_TW_CSS = `
 @property --glass-from{syntax:'<color>';inherits:true;initial-value:#a78bfa}
@@ -22,20 +21,21 @@ const GLASS_ORB_TW_CSS = `
 @property --glass-halo-swell{syntax:'<number>';inherits:true;initial-value:0.14}
 @property --glass-rim-base{syntax:'<number>';inherits:true;initial-value:0.85}
 @property --glass-rim-gain{syntax:'<number>';inherits:true;initial-value:0}
-[data-glass-orb]{--glass-from:var(--orb-color-from, #a78bfa);--glass-to:var(--orb-color-to, #38bdf8);--glass-breathe:0;--glass-halo-base:0.72;--glass-halo-gain:0.28;--glass-halo-swell:0.14;--glass-rim-base:0.85;--glass-rim-gain:0;--glass-blend:color-mix(in oklab, var(--glass-from), var(--glass-to) 50%);--glass-fill:light-dark(color-mix(in oklab, var(--glass-blend), transparent 62%), color-mix(in oklab, var(--glass-blend), transparent 86%));--glass-edge:light-dark(color-mix(in oklab, color-mix(in oklab, var(--glass-from), #171a2b 55%), transparent 35%), color-mix(in oklab, #ffffff, transparent 66%));--glass-depth:light-dark(color-mix(in oklab, color-mix(in oklab, var(--glass-from), #10131f 42%), transparent 46%), color-mix(in oklab, color-mix(in oklab, var(--glass-from), #05060c 52%), transparent 36%));--glass-contact:light-dark(color-mix(in oklab, color-mix(in oklab, var(--glass-from), #10131f 55%), transparent 50%), color-mix(in oklab, color-mix(in oklab, var(--glass-blend), #000000 40%), transparent 42%));--glass-halo-tight:light-dark(color-mix(in oklab, var(--glass-blend), transparent 32%), transparent);--glass-halo-wide:light-dark(transparent, color-mix(in oklab, var(--glass-blend), transparent 42%));--glass-caustic:color-mix(in oklab, color-mix(in oklab, var(--glass-to), #ffffff 55%), transparent 28%);--glass-spec-counter:color-mix(in oklab, color-mix(in oklab, var(--glass-to), #ffffff 42%), transparent 70%);transition:--glass-from 0.4s ease, --glass-to 0.4s ease, --glass-breathe 0.45s ease, --glass-halo-base 0.35s ease, --glass-halo-gain 0.35s ease, --glass-halo-swell 0.35s ease, --glass-rim-base 0.35s ease, --glass-rim-gain 0.35s ease, opacity 0.3s ease, filter 0.3s ease}
+[data-glass-orb]{--glass-from:var(--orb-color-from, #a78bfa);--glass-to:var(--orb-color-to, #38bdf8);--glass-breathe:0;--glass-halo-base:0.72;--glass-halo-gain:0.28;--glass-halo-swell:0.14;--glass-rim-base:0.85;--glass-rim-gain:0;--glass-blend:color-mix(in oklab, var(--glass-from), var(--glass-to) 50%);--glass-fill:light-dark(color-mix(in oklab, var(--glass-blend), transparent 62%), color-mix(in oklab, var(--glass-blend), transparent 86%));--glass-edge:light-dark(color-mix(in oklab, color-mix(in oklab, var(--glass-from), #171a2b 55%), transparent 35%), color-mix(in oklab, #ffffff, transparent 66%));--glass-depth:light-dark(color-mix(in oklab, color-mix(in oklab, var(--glass-from), #10131f 42%), transparent 46%), color-mix(in oklab, color-mix(in oklab, var(--glass-from), #05060c 52%), transparent 36%));--glass-contact:light-dark(color-mix(in oklab, color-mix(in oklab, var(--glass-from), #10131f 55%), transparent 50%), color-mix(in oklab, color-mix(in oklab, var(--glass-blend), #000000 40%), transparent 42%));--glass-halo-tight:light-dark(color-mix(in oklab, var(--glass-blend), transparent 32%), transparent);--glass-halo-wide:light-dark(transparent, color-mix(in oklab, var(--glass-blend), transparent 42%));--glass-caustic:color-mix(in oklab, color-mix(in oklab, var(--glass-to), #ffffff 55%), transparent 28%);--glass-spec-counter:color-mix(in oklab, color-mix(in oklab, var(--glass-to), #ffffff 42%), transparent 70%);--orb-dur:0.2s;--orb-ease:cubic-bezier(0.16, 1, 0.3, 1);transition-property:--glass-from, --glass-to, --glass-breathe, --glass-halo-base, --glass-halo-gain, --glass-halo-swell, --glass-rim-base, --glass-rim-gain, opacity, filter;transition-duration:var(--orb-dur);transition-timing-function:var(--orb-ease)}
+[data-glass-orb]:is([data-state=idle],[data-state=disabled]){--orb-dur:0.6s;--orb-ease:cubic-bezier(0.65, 0, 0.35, 1)}
 @keyframes glass-orb-tw-rotate{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 @keyframes glass-orb-tw-hue{from{filter:blur(14px) hue-rotate(-8deg)}to{filter:blur(14px) hue-rotate(8deg)}}
 @keyframes glass-orb-tw-shimmer{from{opacity:0.72;transform:translate3d(-0.6%, 0.4%, 0)}to{opacity:1;transform:translate3d(0.6%, -0.4%, 0)}}
 @keyframes glass-orb-tw-breathe{0%,100%{scale:1}50%{scale:calc(1 + 0.035 * var(--glass-breathe, 0))}}
-@keyframes glass-orb-tw-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+@keyframes glass-orb-tw-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-2px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(1.5px)}}
 [data-glass-orb] [data-part=halo]{opacity:calc(var(--glass-halo-base) + var(--glass-halo-gain) * var(--orb-level, 0));transform:scale(calc(1 + var(--glass-halo-swell) * var(--orb-level, 0)))}
 [data-glass-orb] [data-part=aura]{opacity:calc(0.62 + 0.38 * var(--orb-level, 0));animation:glass-orb-tw-rotate calc(9s / var(--orb-speed, 1)) linear infinite, glass-orb-tw-hue calc(16s / var(--orb-speed, 1)) ease-in-out infinite alternate}
 [data-glass-orb] [data-part=sphere]{transform:scale(calc(1 + 0.045 * var(--orb-level, 0)));animation:glass-orb-tw-breathe calc(3.2s / var(--orb-speed, 1)) ease-in-out infinite}
 [data-glass-orb] [data-part=sheen]{animation:glass-orb-tw-rotate calc(14s / var(--orb-speed, 1)) linear infinite}
 [data-glass-orb] [data-part=rim]{opacity:calc(var(--glass-rim-base) + var(--glass-rim-gain) * var(--orb-level, 0))}
 [data-glass-orb] [data-part=spec]{animation:glass-orb-tw-shimmer calc(7s / var(--orb-speed, 1)) ease-in-out infinite alternate}
-[data-glass-orb] [data-part=orbit]{opacity:0;transition:opacity 0.35s ease;animation:glass-orb-tw-rotate calc(4.5s / var(--orb-speed, 1)) linear infinite reverse}
-[data-glass-orb] [data-part=counter]{opacity:0;transition:opacity 0.35s ease;animation:glass-orb-tw-rotate calc(2.6s / var(--orb-speed, 1)) linear infinite reverse}
+[data-glass-orb] [data-part=orbit]{opacity:0;transition:opacity var(--orb-dur) var(--orb-ease);animation:glass-orb-tw-rotate calc(4.5s / var(--orb-speed, 1)) linear infinite reverse}
+[data-glass-orb] [data-part=counter]{opacity:0;transition:opacity var(--orb-dur) var(--orb-ease);animation:glass-orb-tw-rotate calc(2.6s / var(--orb-speed, 1)) linear infinite reverse}
 [data-glass-orb][data-state=connecting]{--glass-breathe:1}
 [data-glass-orb][data-state=connecting] [data-part=orbit]{opacity:0.55}
 [data-glass-orb][data-state=thinking] [data-part=counter]{opacity:1}
@@ -80,7 +80,6 @@ export const GlassOrbTw = ({
   ref,
 }: OrbProps) => {
   const innerRef = useRef<HTMLDivElement>(null);
-  const stateRef = useRef(state);
 
   const setRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -91,60 +90,13 @@ export const GlassOrbTw = ({
     [ref],
   );
 
-  useEffect(() => {
-    stateRef.current = state;
-  });
+  useOrbLevel(innerRef, state, levelRef, undefined, speed);
+  const reduced = useReducedMotion();
 
   useEffect(() => {
-    const el = innerRef.current;
-    if (!el) return;
-    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    el.style.setProperty('--orb-level', REDUCED_LEVELS[state].toFixed(3));
-  }, [state]);
-
-  useEffect(() => {
-    const el = innerRef.current;
-    if (!el) return;
-
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-    let raf = 0;
-    let running = false;
-    let start: number | null = null;
-    let last: number | null = null;
-    let smoothed = 0;
-
-    const frame = (now: number) => {
-      if (start === null) start = now;
-      const dt = last === null ? 1 / 60 : Math.min((now - last) / 1000, 0.1);
-      last = now;
-      const t = (now - start) / 1000;
-      const live = levelRef?.current;
-      const hasLive = typeof live === 'number' && live >= 0;
-      const target = hasLive ? live : stateEnergy(stateRef.current, t);
-      smoothed = approach(smoothed, target, 7.7, dt);
-      el.style.setProperty('--orb-level', smoothed.toFixed(3));
-      raf = requestAnimationFrame(frame);
-    };
-
-    const setActive = (active: boolean) => {
-      if (active === running) return;
-      running = active;
-      if (active) {
-        last = null;
-        raf = requestAnimationFrame(frame);
-      } else {
-        cancelAnimationFrame(raf);
-      }
-    };
-
-    setActive(true);
-    const unobserve = observeActivity(el, setActive);
-    return () => {
-      unobserve();
-      cancelAnimationFrame(raf);
-    };
-  }, [levelRef]);
+    if (!reduced) return;
+    innerRef.current?.style.setProperty('--orb-level', REDUCED_LEVELS[state].toFixed(3));
+  }, [reduced, state]);
 
   const rimMask = RING_MASK('7px', '5px', '1.5px');
   const arcMask = RING_MASK('8px', '6px', '2px');

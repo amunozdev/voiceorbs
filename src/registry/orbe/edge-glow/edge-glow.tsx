@@ -31,7 +31,7 @@ export const EdgeGlow = ({
     },
     [ref],
   );
-  useOrbLevel(innerRef, state, levelRef);
+  useOrbLevel(innerRef, state, levelRef, undefined, speed);
   const hasChildren = children != null;
   const isError = state === 'error';
 

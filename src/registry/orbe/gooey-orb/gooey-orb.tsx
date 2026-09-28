@@ -1,19 +1,18 @@
 'use client';
 
 import type { CSSProperties } from 'react';
-import { useCallback, useEffect, useId, useRef } from 'react';
+import { useCallback, useId, useRef } from 'react';
 import {
   approach,
-  createStateMix,
+  blendStates,
+  clamp01,
   ERROR_COLOR_FROM,
   ERROR_COLOR_TO,
   orbVars,
-  stateEnergy,
   type OrbProps,
   type OrbState,
 } from '../../lib/orb-state';
-import { observeActivity } from '../../lib/use-in-view';
-import { useOrbLevel } from '../../lib/use-orb-level';
+import { useOrbAnimator, type OrbFrame } from '../../lib/use-orb-animator';
 
 interface Satellite {
   r: number;
@@ -41,13 +40,13 @@ const STATIC_XY = SATELLITES.map((s) => ({
 
 const STATIC_POSE = STATIC_XY.map((p) => ({ cx: p.x.toFixed(2), cy: p.y.toFixed(2) }));
 
-interface StaticParams {
+type StaticParams = {
   disp: number;
   rx: number;
   ry: number;
   d: number;
   shine: number;
-}
+};
 
 const STATIC_PARAMS: Record<OrbState, StaticParams> = {
   idle: { disp: 7, rx: 1, ry: 1, d: 0, shine: 0.7 },
@@ -84,6 +83,47 @@ const errorPulse = (t: number) => {
 const mixToward = (base: string, target: string, pct: number) =>
   pct <= 0 ? base : pct >= 100 ? target : `color-mix(in oklab, ${target} ${pct}%, ${base})`;
 
+interface GooSim {
+  lastPhase: number;
+  phX: number;
+  phY: number;
+  phB: number;
+  prevLevel: number;
+  amp: number;
+  squash: number;
+  dropStart: number | null;
+  dropAngle: number;
+  lastDrop: number;
+  theta: number[];
+  dist: number[];
+  lastFrom: string;
+  lastTo: string;
+  poseKey: string;
+}
+
+const createSim = (): GooSim => ({
+  lastPhase: 0,
+  phX: 0.7,
+  phY: 2.1,
+  phB: 0,
+  prevLevel: 0.06,
+  amp: 6,
+  squash: 0,
+  dropStart: null,
+  dropAngle: 0,
+  lastDrop: -2,
+  theta: SATELLITES.map((s) => s.phase),
+  dist: SATELLITES.map((s) => s.staticD),
+  lastFrom: '',
+  lastTo: '',
+  poseKey: '',
+});
+
+const REST_TRANSITION =
+  'opacity 600ms cubic-bezier(0.65, 0, 0.35, 1), filter 600ms cubic-bezier(0.65, 0, 0.35, 1)';
+const ENTER_TRANSITION =
+  'opacity 200ms cubic-bezier(0.16, 1, 0.3, 1), filter 200ms cubic-bezier(0.16, 1, 0.3, 1)';
+
 export const GooeyOrb = ({
   state = 'idle',
   size = 160,
@@ -106,10 +146,7 @@ export const GooeyOrb = ({
   const shineRef = useRef<SVGEllipseElement>(null);
   const dropRef = useRef<SVGCircleElement>(null);
   const satRefs = useRef<(SVGCircleElement | null)[]>([]);
-  const stateRef = useRef(state);
-  const speedRef = useRef(speed);
-  const colorsRef = useRef({ from: colorFrom, to: colorTo });
-  const syncRef = useRef<(() => void) | null>(null);
+  const simRef = useRef<GooSim | null>(null);
 
   const setHostRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -120,131 +157,85 @@ export const GooeyOrb = ({
     [ref],
   );
 
-  useEffect(() => {
-    stateRef.current = state;
-    speedRef.current = speed;
-    colorsRef.current = { from: colorFrom, to: colorTo };
-    syncRef.current?.();
-  });
-
-  useOrbLevel(hostRef, state, levelRef);
-
-  const disabled = state === 'disabled';
-
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-
-    const pose = (el: SVGElement | null, attrs: Record<string, string>) => {
-      if (!el) return;
-      for (const key in attrs) el.setAttribute(key, attrs[key]);
-    };
-
-    const setVars = (fromColor: string, toColor: string) => {
-      host.style.setProperty('--goo-from', fromColor);
-      host.style.setProperty('--goo-to', toColor);
-    };
-
-    const setStaticPose = (st: OrbState) => {
-      const params = STATIC_PARAMS[st];
-      const rx = CORE_R * params.rx;
-      const ry = CORE_R * params.ry;
-      sceneRef.current?.setAttribute('transform', 'translate(0 0)');
-      dispRef.current?.setAttribute('scale', String(params.disp));
-      pose(coreRef.current, { cx: '50', cy: '50', rx: rx.toFixed(2), ry: ry.toFixed(2) });
-      pose(shineRef.current, {
-        cx: (50 - rx * 0.24).toFixed(2),
-        cy: (50 - ry * 0.3).toFixed(2),
-        rx: (rx * 0.45).toFixed(2),
-        ry: (ry * 0.34).toFixed(2),
-        opacity: params.shine.toFixed(2),
-      });
-      SATELLITES.forEach((s, i) => {
-        const dd = Math.max(s.fused + 2, s.staticD + params.d);
-        pose(satRefs.current[i] ?? null, {
-          cx: (50 + Math.cos(s.phase) * dd).toFixed(2),
-          cy: (50 + Math.sin(s.phase) * dd).toFixed(2),
-        });
-      });
-      dropRef.current?.setAttribute('r', '0');
-    };
-
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      const applyStatic = () => {
-        const st = stateRef.current;
-        setStaticPose(st);
-        const error = st === 'error';
-        setVars(
-          error ? ERROR_COLOR_FROM : colorsRef.current.from,
-          error ? ERROR_COLOR_TO : colorsRef.current.to,
-        );
-      };
-      applyStatic();
-      syncRef.current = applyStatic;
-      return () => {
-        syncRef.current = null;
-      };
-    }
-
-    host.style.transition = 'opacity 400ms ease, filter 400ms ease';
-
-    let raf = 0;
-    let running = false;
-    let last: number | null = null;
-    let t = 0;
-    let phX = 0.7;
-    let phY = 2.1;
-    let phB = 0;
-    let level = 0.06;
-    let prevLevel = level;
-    let amp = 6;
-    let squash = 0;
-    let lastFrom = '';
-    let lastTo = '';
-    let dropStart: number | null = null;
-    let dropAngle = 0;
-    let lastDrop = -2;
-    const theta = SATELLITES.map((s) => s.phase);
-    const dist = SATELLITES.map((s) => s.staticD);
-    const mix = createStateMix(stateRef.current);
-
-    const bandOr = (name: string, fallback: number) => {
-      const value = Number.parseFloat(host.style.getPropertyValue(name));
-      return Number.isNaN(value) ? fallback : value;
-    };
-
-    const frame = (now: number) => {
-      if (last === null) last = now;
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      const st = stateRef.current;
-      const step = dt * speedRef.current;
-      t += step;
-
-      const weights = mix.update(st, dt);
+  const onFrame = useCallback(
+    (frame: OrbFrame) => {
+      const host = hostRef.current;
+      if (!host) return;
+      const sim = (simRef.current ??= createSim());
+      const { weights } = frame;
+      const st = frame.state;
       const wThink = weights.thinking;
       const wConnect = weights.connecting;
       const wSpeak = weights.speaking;
       const wError = weights.error;
       const wDisabled = weights.disabled;
 
-      phX += step * (0.3 + 0.65 * wThink + 0.25 * wConnect);
-      phY += step * (0.22 + 0.3 * wThink + 0.33 * wConnect);
-      phB += step * 0.75;
+      const pose = (el: SVGElement | null, attrs: Record<string, string>) => {
+        if (!el) return;
+        for (const key in attrs) el.setAttribute(key, attrs[key]);
+      };
 
-      const live = levelRef?.current;
-      const hasLive = typeof live === 'number' && live >= 0;
-      const raw = hasLive
-        ? live
-        : stateEnergy('connecting', t) * wConnect +
-          stateEnergy('listening', t) * weights.listening +
-          stateEnergy('thinking', t) * wThink +
-          stateEnergy('speaking', t) * wSpeak +
-          stateEnergy('error', t) * wError;
-      const floor = 0.055 + 0.05 * Math.sin(phB);
-      level = approach(level, Math.max(raw, floor), 7, dt);
-      const rising = level - prevLevel;
-      prevLevel = level;
+      const applyStatic = (params: StaticParams) => {
+        const rx = CORE_R * params.rx;
+        const ry = CORE_R * params.ry;
+        const key = `${params.disp.toFixed(2)}|${rx.toFixed(2)}|${ry.toFixed(2)}|${params.d.toFixed(2)}|${params.shine.toFixed(2)}`;
+        if (key === sim.poseKey) return;
+        sim.poseKey = key;
+        sceneRef.current?.setAttribute('transform', 'translate(0 0)');
+        dispRef.current?.setAttribute('scale', params.disp.toFixed(2));
+        pose(coreRef.current, { cx: '50', cy: '50', rx: rx.toFixed(2), ry: ry.toFixed(2) });
+        pose(shineRef.current, {
+          cx: (50 - rx * 0.24).toFixed(2),
+          cy: (50 - ry * 0.3).toFixed(2),
+          rx: (rx * 0.45).toFixed(2),
+          ry: (ry * 0.34).toFixed(2),
+          opacity: params.shine.toFixed(2),
+        });
+        SATELLITES.forEach((s, i) => {
+          const dd = Math.max(s.fused + 2, s.staticD + params.d);
+          pose(satRefs.current[i] ?? null, {
+            cx: (50 + Math.cos(s.phase) * dd).toFixed(2),
+            cy: (50 + Math.sin(s.phase) * dd).toFixed(2),
+          });
+        });
+        dropRef.current?.setAttribute('r', '0');
+      };
+
+      const pct = Math.round(wError * 100);
+      const fromVar = mixToward(colorFrom, ERROR_COLOR_FROM, pct);
+      const toVar = mixToward(colorTo, ERROR_COLOR_TO, pct);
+      if (fromVar !== sim.lastFrom || toVar !== sim.lastTo) {
+        sim.lastFrom = fromVar;
+        sim.lastTo = toVar;
+        host.style.setProperty('--goo-from', fromVar);
+        host.style.setProperty('--goo-to', toVar);
+      }
+
+      if (frame.reduced) {
+        sim.dropStart = null;
+        applyStatic(blendStates(weights, STATIC_PARAMS));
+        return;
+      }
+
+      const parked = st === 'disabled' && wDisabled > 0.99 && wError < 0.005 && sim.dropStart === null;
+      if (parked) {
+        applyStatic(STATIC_PARAMS.disabled);
+        return;
+      }
+      sim.poseKey = '';
+
+      const t = frame.phase;
+      const step = Math.max(0, t - sim.lastPhase);
+      sim.lastPhase = t;
+
+      sim.phX += step * (0.3 + 0.65 * wThink + 0.25 * wConnect);
+      sim.phY += step * (0.22 + 0.3 * wThink + 0.33 * wConnect);
+      sim.phB += step * 0.75;
+
+      const floor = 0.055 + 0.05 * Math.sin(sim.phB);
+      const level = Math.max(frame.level, floor);
+      const rising = level - sim.prevLevel;
+      sim.prevLevel = level;
 
       const ampTarget =
         6 * weights.idle +
@@ -253,27 +244,27 @@ export const GooeyOrb = ({
         12 * wThink +
         10 * wSpeak +
         2.5 * wError;
-      amp = approach(amp, ampTarget, 4, dt);
-      squash = approach(squash, 0.055 * wThink, 5, dt);
+      sim.amp = approach(sim.amp, ampTarget, 4, frame.dt);
+      sim.squash = approach(sim.squash, 0.055 * wThink, 5, frame.dt);
 
-      const bass = bandOr('--orb-bass', level);
-      const mid = bandOr('--orb-mid', level);
-      const treble = bandOr('--orb-treble', level);
+      const bass = clamp01(level * (0.78 + 0.22 * Math.sin(t * 2.3)));
+      const mid = clamp01(level * (0.78 + 0.22 * Math.sin(t * 3.4 + 2.1)));
+      const treble = clamp01(level * (0.78 + 0.22 * Math.sin(t * 4.6 + 4.2)));
 
       const away = 1 - wDisabled;
       const wob = 1 + 0.3 * mid;
-      const dx = amp * wob * Math.sin(phX) * away;
-      const dy = amp * wob * Math.sin(phY + 1.1) * away;
+      const dx = sim.amp * wob * Math.sin(sim.phX) * away;
+      const dy = sim.amp * wob * Math.sin(sim.phY + 1.1) * away;
       const bx = 50 + dx;
       const by = 50 + dy;
 
       const p = wError > 0.001 ? errorPulse(t) : 0;
-      let r = (CORE_R + 0.8 * Math.sin(phB) + 2.1 * level + 1.7 * bass) * (1 - 0.09 * p * wError);
-      let scale = 8 + 18 * level + 7 * bass + 2.4 * treble * Math.sin(phB * 12);
+      let r = (CORE_R + 0.8 * Math.sin(sim.phB) + 2.1 * level + 1.7 * bass) * (1 - 0.09 * p * wError);
+      let scale = 8 + 18 * level + 7 * bass + 2.4 * treble * Math.sin(sim.phB * 12);
       scale += (6.5 + 3 * p - scale) * wError;
       r += (CORE_R - r) * wDisabled;
       scale += (7 - scale) * wDisabled;
-      const sq = squash * (1 + 0.5 * mid) * Math.sin(phX * 2 + 1.2);
+      const sq = sim.squash * (1 + 0.5 * mid) * Math.sin(sim.phX * 2 + 1.2);
 
       sceneRef.current?.setAttribute('transform', `translate(${(-dx).toFixed(2)} ${(-dy).toFixed(2)})`);
       dispRef.current?.setAttribute('scale', scale.toFixed(2));
@@ -293,28 +284,28 @@ export const GooeyOrb = ({
 
       const satLevel = (level + 0.26 * wConnect + 0.16 * bass) * (1 - 0.8 * wError);
       SATELLITES.forEach((s, i) => {
-        theta[i] += step * (s.w + (1.5 - s.w) * wConnect);
+        sim.theta[i] += step * (s.w + (1.5 - s.w) * wConnect);
         const reach = s.fused + (s.detach - s.fused) * smoothstep((satLevel - s.lo) / (s.hi - s.lo));
-        dist[i] = approach(dist[i], reach, 7, dt);
-        const sx = bx + Math.cos(theta[i]) * dist[i];
-        const sy = by + Math.sin(theta[i]) * dist[i];
+        sim.dist[i] = approach(sim.dist[i], reach, 7, frame.dt);
+        const sx = bx + Math.cos(sim.theta[i]) * sim.dist[i];
+        const sy = by + Math.sin(sim.theta[i]) * sim.dist[i];
         pose(satRefs.current[i] ?? null, {
           cx: (sx + (STATIC_XY[i].x - sx) * wDisabled).toFixed(2),
           cy: (sy + (STATIC_XY[i].y - sy) * wDisabled).toFixed(2),
         });
       });
 
-      if (dropStart !== null) {
-        const tau = (t - dropStart) / 0.8;
+      if (sim.dropStart !== null) {
+        const tau = (t - sim.dropStart) / 0.8;
         if (tau >= 1) {
-          dropStart = null;
+          sim.dropStart = null;
           dropRef.current?.setAttribute('r', '0');
         } else {
           const out = 1 - (1 - tau) ** 2;
           const dd = 24 + 34 * out;
           pose(dropRef.current, {
-            cx: (bx + Math.cos(dropAngle) * dd).toFixed(2),
-            cy: (by + Math.sin(dropAngle) * dd).toFixed(2),
+            cx: (bx + Math.cos(sim.dropAngle) * dd).toFixed(2),
+            cy: (by + Math.sin(sim.dropAngle) * dd).toFixed(2),
             r: (2.6 * (1 - tau) * wSpeak).toFixed(2),
           });
         }
@@ -323,58 +314,20 @@ export const GooeyOrb = ({
         wSpeak > 0.6 &&
         level > 0.55 &&
         rising > 0.0008 &&
-        t - lastDrop > 1.15
+        t - sim.lastDrop > 1.15
       ) {
-        dropStart = t;
-        lastDrop = t;
-        dropAngle = theta[0] + 1.1;
+        sim.dropStart = t;
+        sim.lastDrop = t;
+        sim.dropAngle = sim.theta[0] + 1.1;
       }
+    },
+    [colorFrom, colorTo],
+  );
 
-      const pct = Math.round(wError * 100);
-      const fromVar = mixToward(colorsRef.current.from, ERROR_COLOR_FROM, pct);
-      const toVar = mixToward(colorsRef.current.to, ERROR_COLOR_TO, pct);
-      if (fromVar !== lastFrom || toVar !== lastTo) {
-        lastFrom = fromVar;
-        lastTo = toVar;
-        setVars(fromVar, toVar);
-      }
+  useOrbAnimator(hostRef, { state, levelRef, speed, onFrame });
 
-      if (st === 'disabled' && wDisabled > 0.99 && wError < 0.005 && dropStart === null) {
-        setStaticPose('disabled');
-        running = false;
-        return;
-      }
-      raf = requestAnimationFrame(frame);
-    };
-
-    let active = !document.hidden;
-
-    const stop = () => {
-      running = false;
-      cancelAnimationFrame(raf);
-    };
-
-    const start = () => {
-      if (running || !active) return;
-      running = true;
-      last = null;
-      raf = requestAnimationFrame(frame);
-    };
-
-    const unobserve = observeActivity(host, (next) => {
-      active = next;
-      if (next) start();
-      else stop();
-    });
-
-    syncRef.current = start;
-    start();
-    return () => {
-      stop();
-      unobserve();
-      syncRef.current = null;
-    };
-  }, [levelRef]);
+  const disabled = state === 'disabled';
+  const resting = state === 'idle' || disabled;
 
   const hostVars = { '--goo-from': colorFrom, '--goo-to': colorTo } as CSSProperties;
 
@@ -391,7 +344,8 @@ export const GooeyOrb = ({
         width: size,
         height: size,
         opacity: disabled ? 0.5 : 1,
-        filter: disabled ? `${SHADOW} grayscale(0.85)` : SHADOW,
+        filter: disabled ? `${SHADOW} grayscale(0.85)` : `${SHADOW} grayscale(0)`,
+        transition: resting ? REST_TRANSITION : ENTER_TRANSITION,
       }}
     >
       <svg viewBox="0 0 100 100" width={size} height={size} aria-hidden focusable="false" style={{ display: 'block' }}>
@@ -407,7 +361,7 @@ export const GooeyOrb = ({
             <stop offset="55%" stopColor="#ffffff" stopOpacity="0.25" />
             <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
           </radialGradient>
-          <filter id={filterId} x="-40" y="-40" width="180" height="180" filterUnits="userSpaceOnUse">
+          <filter id={filterId} x="-25" y="-25" width="150" height="150" filterUnits="userSpaceOnUse">
             <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="pre" />
             <feColorMatrix in="pre" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo" />
             <feTurbulence type="fractalNoise" baseFrequency="0.012 0.016" numOctaves="2" seed="7" result="grain" />

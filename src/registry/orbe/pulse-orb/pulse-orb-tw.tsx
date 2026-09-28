@@ -34,15 +34,17 @@ const PULSE_TW_CSS = `
   --ptw-breathe-idle: 0;
   --ptw-breathe-think: 0;
   --ptw-blink: 0;
-  transition:
-    opacity 0.3s ease,
-    filter 0.3s ease,
-    --ptw-from 0.35s ease,
-    --ptw-to 0.35s ease,
-    --ptw-glow 0.35s ease,
-    --ptw-breathe-idle 0.45s ease,
-    --ptw-breathe-think 0.45s ease,
-    --ptw-blink 0.3s ease;
+  --orb-dur: 0.2s;
+  --orb-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  transition-property:
+    opacity, filter, --ptw-from, --ptw-to, --ptw-glow, --ptw-breathe-idle,
+    --ptw-breathe-think, --ptw-blink;
+  transition-duration: var(--orb-dur);
+  transition-timing-function: var(--orb-ease);
+}
+[data-pulse-orb-tw]:is([data-state='idle'], [data-state='disabled']) {
+  --orb-dur: 0.6s;
+  --orb-ease: cubic-bezier(0.65, 0, 0.35, 1);
 }
 [data-pulse-orb-tw][data-state='idle'] { --ptw-breathe-idle: 1; }
 [data-pulse-orb-tw][data-state='thinking'] { --ptw-breathe-think: 1; }
@@ -59,18 +61,29 @@ const PULSE_TW_CSS = `
   opacity: calc(var(--ptw-glow) * (0.5 + 0.5 * var(--orb-level, 0)));
 }
 [data-pulse-orb-tw] [data-ring-set] {
+  --ptw-ring-play: paused;
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition-property: opacity, --ptw-ring-play;
+  transition-duration: var(--orb-dur), var(--orb-dur);
+  transition-timing-function: var(--orb-ease), step-end;
+  transition-behavior: normal, allow-discrete;
 }
 [data-pulse-orb-tw][data-state='idle'] [data-ring-set='idle'] { opacity: 0.45; }
-[data-pulse-orb-tw][data-state='listening'] [data-ring-set='listen'] { opacity: 1; }
+[data-pulse-orb-tw][data-state='listening'] [data-ring-set='listen'],
 [data-pulse-orb-tw][data-state='speaking'] [data-ring-set='speak'] { opacity: 1; }
+[data-pulse-orb-tw][data-state='idle'] [data-ring-set='idle'],
+[data-pulse-orb-tw][data-state='listening'] [data-ring-set='listen'],
+[data-pulse-orb-tw][data-state='speaking'] [data-ring-set='speak'] {
+  --ptw-ring-play: running;
+  transition-duration: var(--orb-dur), 0s;
+}
 [data-pulse-orb-tw] [data-ring] {
   animation: pulse-orb-tw-emit calc(var(--ptw-ring-base) * var(--ptw-ring-time, 1) / var(--orb-speed, 1)) cubic-bezier(0.16, 0.84, 0.44, 1) calc(var(--ptw-ring-delay) * var(--ptw-ring-time, 1) / var(--orb-speed, 1)) infinite var(--ptw-ring-dir, normal);
+  animation-play-state: var(--ptw-ring-play, running);
 }
 [data-pulse-orb-tw] [data-arc] {
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity var(--orb-dur) var(--orb-ease);
 }
 [data-pulse-orb-tw][data-state='connecting'] [data-arc] { opacity: 0.75; }
 [data-pulse-orb-tw][data-state='thinking'] [data-arc] { opacity: 1; }
@@ -90,7 +103,7 @@ const PULSE_TW_CSS = `
   animation:
     pulse-orb-tw-breathe-idle calc(4s / var(--orb-speed, 1)) ease-in-out infinite,
     pulse-orb-tw-blink calc(1.8s / var(--orb-speed, 1)) ease-in-out infinite;
-  transition: filter 0.35s ease;
+  transition: filter var(--orb-dur) var(--orb-ease);
 }
 [data-pulse-orb-tw][data-state='connecting'] [data-core] { filter: saturate(0.75) brightness(0.98); }
 @keyframes pulse-orb-tw-emit {
@@ -143,7 +156,7 @@ export const PulseOrbTw = ({
   ref,
 }: OrbProps) => {
   const internalRef = useRef<HTMLDivElement | null>(null);
-  useOrbLevel(internalRef, state, levelRef);
+  useOrbLevel(internalRef, state, levelRef, undefined, speed);
   const setRef = useCallback(
     (node: HTMLDivElement | null) => {
       internalRef.current = node;

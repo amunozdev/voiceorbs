@@ -59,6 +59,26 @@ States: ${coreStates} form the core lifecycle; \`error\` and \`disabled\` are op
 
 ${indexLines}
 
+## Compact status pill
+
+Every orb also works as a compact status indicator for tight spaces (chat headers, toolbars, inline agent steps). \`OrbPill\` (\`src/registry/lib/orb-pill.tsx\`) wraps any orb at a small size next to an animated feedback label: letters blur in on change, a light sweep runs while connecting or thinking, and the width eases between messages.
+
+\`\`\`tsx
+import { OrbPill } from '@/registry/lib/orb-pill';
+import { SiriSheet } from '@/registry/orbe/siri-sheet/siri-sheet';
+
+<OrbPill
+  orb={SiriSheet}
+  state="thinking"
+  messages={{ thinking: ['Fetching prices', 'Running the numbers'] }}
+/>
+\`\`\`
+
+- \`messages\`: per-state label, or an array of steps that rotate every \`interval\` ms (default 2600). Defaults: Ready, Connecting, Listening, Thinking, Speaking.
+- \`text\`: fixed label that overrides \`messages\` (drive it from your own tool-call events).
+- \`size\`: \`'sm' | 'md' | 'lg'\`; \`shimmer\`: \`'auto' | 'always' | 'never'\`; \`orbScale\`: enlarge orbs whose visual does not fill their box.
+- Colors inherit \`currentColor\`; override with \`--orb-pill-bg\`, \`--orb-pill-border\`, \`--orb-pill-fg\`.
+
 ${orbSections}
 ## Shared library
 
@@ -85,9 +105,9 @@ export const AssistantOrb = () => {
 \`\`\`
 
 - \`levelRef.current\` is a live 0..1 amplitude read every frame without re-render; set it to a negative value to fall back to the procedural animation.
-- For smooth per-frame transitions, \`orb-state.ts\` exports \`approach()\` (exponential easing toward a target) and \`createStateMix()\` (blends state weights over time).
+- For smooth per-frame transitions, \`orb-state.ts\` exports \`approach()\` (exponential easing toward a target), \`createStateMix()\` (blends state weights; active states arrive in about 0.2 s, idle settles in about 0.6 s) and \`blendStates()\` (blends per-state parameter tables). \`use-orb-animator.ts\` runs one animation loop per orb that pauses offscreen, follows \`prefers-reduced-motion\` live and accumulates phase so speed changes never jump.
 - Accessibility: render the shared \`<OrbStatus state={state} />\` (\`lib/orb-status.tsx\`) near the orb so state changes are announced via a polite live region, and never signal the error state by color alone. Respect \`prefers-reduced-motion\`.
-- Provider wiring: the "Copy AI prompt" button on each orb page (${SITE_URL}/orbs/<id>) offers ready-made integration notes for Vapi, ElevenLabs Agents, LiveKit Agents and OpenAI Realtime (WebRTC), mapping each SDK's lifecycle events to \`state\` and its volume APIs to \`levelRef\`.
+- Provider wiring: the "Copy AI prompt" button on each orb page (${SITE_URL}/orbs/<id>) offers ready-made integration notes for Vapi, ElevenLabs Agents, LiveKit Agents and OpenAI Realtime (WebRTC), mapping each SDK's lifecycle events to \`state\` and its volume APIs to \`levelRef\`. Step-by-step recipes: ${SITE_URL}/recipes
 `;
 
   return new Response(body, {

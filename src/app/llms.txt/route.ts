@@ -33,9 +33,30 @@ States: ${coreStates} form the core lifecycle; \`error\` and \`disabled\` are op
 
 ${orbLines}
 
+## Compact status pill
+
+Every orb also works as a compact status indicator for tight spaces (chat headers, toolbars, inline agent steps). \`OrbPill\` (\`src/registry/lib/orb-pill.tsx\`) wraps any orb at a small size next to an animated feedback label: letters blur in on change, a light sweep runs while connecting or thinking, and the width eases between messages.
+
+\`\`\`tsx
+import { OrbPill } from '@/registry/lib/orb-pill';
+import { SiriSheet } from '@/registry/orbe/siri-sheet/siri-sheet';
+
+<OrbPill
+  orb={SiriSheet}
+  state="thinking"
+  messages={{ thinking: ['Fetching prices', 'Running the numbers'] }}
+/>
+\`\`\`
+
+- \`messages\`: per-state label, or an array of steps that rotate every \`interval\` ms (default 2600). Defaults: Ready, Connecting, Listening, Thinking, Speaking.
+- \`text\`: fixed label that overrides \`messages\` (drive it from your own tool-call events).
+- \`size\`: \`'sm' | 'md' | 'lg'\`; \`shimmer\`: \`'auto' | 'always' | 'never'\`; \`orbScale\`: enlarge orbs whose visual does not fill their box.
+- Colors inherit \`currentColor\`; override with \`--orb-pill-bg\`, \`--orb-pill-border\`, \`--orb-pill-fg\`.
+
 ## Optional
 
 - [GitHub repository](${REPO_URL}): full source, MIT licensed
+- [Recipes](${SITE_URL}/recipes): wiring guides for a plain microphone, Vapi, ElevenLabs Agents, LiveKit Agents and OpenAI Realtime
 - [Full source dump](${SITE_URL}/llms-full.txt): every orb plus the shared lib and an integration guide in one file
 `;
 

@@ -29,13 +29,13 @@ Copy-paste animated orbs for AI voice assistants. 20 audio-reactive React compon
 | [Galaxy Orb](https://voiceorbs.vercel.app/orbs/galaxy-orb) | Canvas | A glassy bubble holding a drifting starfield and nebula, with a specular glare and an iridescent, chromatic rim. |
 | [Nebula Orb](https://voiceorbs.vercel.app/orbs/nebula-orb) | WebGL (R3F + GLSL) | 3D sphere with simplex-noise displacement and fresnel. The “voice mode”. |
 | [Waveform Ring](https://voiceorbs.vercel.app/orbs/waveform-ring) | Canvas | A ring whose radius traces the live waveform: time-domain audio drawn in polar coordinates. |
-| [Edge Glow](https://voiceorbs.vercel.app/orbs/edge-glow) | Pure CSS | Siri-style ambient frame: a masked conic-gradient glow that wraps your own content instead of sitting in the middle. |
 | [Iridescent Flow](https://voiceorbs.vercel.app/orbs/iridescent-flow) | Shader (canvas) | Single-pass fragment shader with flowing iridescent hues. Raw WebGL, zero dependencies. |
 | [Mercury Orb](https://voiceorbs.vercel.app/orbs/mercury-orb) | Shader (canvas) | Paper liquid-metal shader: chrome ripples flowing around a molten core. |
 | [Minimal Orb](https://voiceorbs.vercel.app/orbs/minimal-orb) | Pure CSS | A single quiet disc: just breath and color. As minimal as it gets. |
 | [Dither Orb](https://voiceorbs.vercel.app/orbs/dither-orb) | Shader (canvas) | Retro ordered-dithering shader: a glowing sphere rendered in dancing dots. |
 | [Grain Orb](https://voiceorbs.vercel.app/orbs/grain-orb) | Shader (canvas) | Grainy gradient blob with film-noise texture that swells with the audio level. |
 | [Aura Field](https://voiceorbs.vercel.app/orbs/aura-field) | Shader (canvas) | Undulating ring of energy that springs open when it starts listening. Raw WebGL, zero dependencies. |
+| [Edge Glow](https://voiceorbs.vercel.app/orbs/edge-glow) | Pure CSS | Siri-style ambient frame: a masked conic-gradient glow that wraps your own content instead of sitting in the middle. |
 
 ## Features
 

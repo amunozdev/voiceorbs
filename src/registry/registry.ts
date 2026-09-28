@@ -301,20 +301,6 @@ export const orbs: OrbMeta[] = [
     ],
   },
   {
-    id: 'edge-glow',
-    name: 'Edge Glow',
-    tagline: 'Siri-style ambient frame: a masked conic-gradient glow that wraps your own content instead of sitting in the middle.',
-    tech: 'Pure CSS',
-    dependencies: [],
-    defaultColorFrom: '#f472b6',
-    defaultColorTo: '#60a5fa',
-    defaultSize: 168,
-    files: [
-      { label: 'edge-glow.tsx', path: 'src/registry/orbe/edge-glow/edge-glow.tsx', lang: 'tsx' },
-      { label: 'edge-glow.module.css', path: 'src/registry/orbe/edge-glow/edge-glow.module.css', lang: 'css' },
-    ],
-  },
-  {
     id: 'iridescent-flow',
     name: 'Iridescent Flow',
     tagline: 'Single-pass fragment shader with flowing iridescent hues. Raw WebGL, zero dependencies.',
@@ -392,6 +378,20 @@ export const orbs: OrbMeta[] = [
     defaultSize: 168,
     files: [
       { label: 'aura-field.tsx', path: 'src/registry/orbe/aura-field/aura-field.tsx', lang: 'tsx' },
+    ],
+  },
+  {
+    id: 'edge-glow',
+    name: 'Edge Glow',
+    tagline: 'Siri-style ambient frame: a masked conic-gradient glow that wraps your own content instead of sitting in the middle.',
+    tech: 'Pure CSS',
+    dependencies: [],
+    defaultColorFrom: '#f472b6',
+    defaultColorTo: '#60a5fa',
+    defaultSize: 168,
+    files: [
+      { label: 'edge-glow.tsx', path: 'src/registry/orbe/edge-glow/edge-glow.tsx', lang: 'tsx' },
+      { label: 'edge-glow.module.css', path: 'src/registry/orbe/edge-glow/edge-glow.module.css', lang: 'css' },
     ],
   },
 ];

@@ -78,7 +78,7 @@ export const ORB_PROPS: OrbPropMeta[] = [
   {
     name: 'size',
     type: 'number',
-    default: '160-184 (per orb)',
+    default: '168 (184 for Nebula Orb)',
     description: 'Diameter of the orb in pixels, also exposed as the --orb-size CSS variable.',
   },
   {

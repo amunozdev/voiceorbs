@@ -136,7 +136,7 @@ export const AssistantOrb = () => {
   return <${component} state={state} levelRef={levelRef} />;
 };
 \`\`\`
-- For smooth per-frame transitions between states, orb-state.ts also exports the helpers approach() (exponential easing toward a target) and createStateMix() (blends state weights over time).
+- For smooth per-frame transitions between states, orb-state.ts exports approach() (exponential easing toward a target), createStateMix() (blends state weights; active states arrive in about 0.2 s, idle settles in about 0.6 s) and blendStates() (mixes per-state parameter tables), and use-orb-animator.ts runs a single animation loop that pauses offscreen and follows prefers-reduced-motion.\n- For compact spaces, wrap the orb in OrbPill (lib/orb-pill.tsx) to show a small status indicator with an animated label; pass messages={{ thinking: ['Fetching prices', 'Running the numbers'] }} for custom steps.
 - Accessibility: render the shared <OrbStatus state={state} /> (lib/orb-status.tsx) near the orb so state changes are announced to screen readers via a polite live region, and never signal the error state by color alone (keep a visible text cue such as OrbStatus).
 - Respect \`prefers-reduced-motion\`.${provider === 'generic' ? '' : `\n\n${PROVIDER_NOTES[provider]}`}${
     provider !== 'generic' && adapter

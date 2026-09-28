@@ -37,4 +37,4 @@ Replace the timers with your real assistant events (Vapi, ElevenLabs, LiveKit, O
 
 ## About `src/registry/`
 
-Everything under `src/registry/` is a **verbatim copy** of the files distributed by the main repo's copy-code button (`src/registry/orbe/pulse-orb/` and `src/registry/lib/` in the main repo): `pulse-orb.tsx`, `pulse-orb.module.css`, `orb-state.ts`, `use-orb-level.ts`, `use-audio-level.ts`, `use-in-view.ts`, and `orb-status.tsx`. Nothing was edited, which is the point: the copied code runs unchanged outside Next.js (the `'use client'` directives are inert under Vite).
+Everything under `src/registry/` is a **verbatim copy** of the files distributed by the main repo's copy-code button (`src/registry/orbe/pulse-orb/` and `src/registry/lib/` in the main repo): `pulse-orb.tsx`, `pulse-orb.module.css`, `orb-state.ts`, `use-orb-level.ts`, `use-orb-animator.ts`, `use-reduced-motion.ts`, `use-audio-level.ts`, `use-in-view.ts`, and `orb-status.tsx`. Nothing was edited, which is the point: the copied code runs unchanged outside Next.js (the `'use client'` directives are inert under Vite).

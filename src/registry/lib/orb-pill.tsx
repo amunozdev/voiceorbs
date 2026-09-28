@@ -118,9 +118,6 @@ export const OrbPillText = ({ text, shimmer = false, onWidth, className }: OrbPi
       style={width === null ? undefined : { width }}
       data-shimmer={shimmer ? '' : undefined}
     >
-      <span ref={measureRef} className={styles.measure} aria-hidden="true">
-        {lines.current.text}
-      </span>
       {lines.leaving && (
         <span
           key={lines.leaving.id}
@@ -134,7 +131,7 @@ export const OrbPillText = ({ text, shimmer = false, onWidth, className }: OrbPi
         </span>
       )}
       <span key={lines.current.id} className={styles.line} aria-hidden="true">
-        <span className={styles.base}>
+        <span ref={measureRef} className={styles.base}>
           <Letters text={lines.current.text} />
         </span>
         <span className={styles.sheen}>{lines.current.text}</span>

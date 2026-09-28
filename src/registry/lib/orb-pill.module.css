@@ -58,13 +58,6 @@
   transition: width 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.measure {
-  position: absolute;
-  visibility: hidden;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
 .line {
   position: absolute;
   inset: 0 auto 0 0;

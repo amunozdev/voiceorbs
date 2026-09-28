@@ -68,7 +68,7 @@ export const OrbPreviewCard = ({ orb }: { orb: GalleryOrb }) => {
   return (
     <article
       id={orb.id}
-      className="group relative flex scroll-mt-20 flex-col gap-4 rounded-2xl [contain-intrinsic-size:auto_440px] [content-visibility:auto] border border-border bg-panel/60 p-5 transition-colors focus-within:border-accent hover:border-accent"
+      className="group relative flex scroll-mt-20 flex-col gap-4 rounded-2xl [contain-intrinsic-block-size:auto_440px] [content-visibility:auto] border border-border bg-panel/60 p-5 transition-colors focus-within:border-accent hover:border-accent"
     >
       <ul aria-label="Traits" className="flex flex-wrap items-center gap-1.5 text-[11px]">
         <li className="rounded-full border border-border px-2.5 py-1 font-medium text-foreground">

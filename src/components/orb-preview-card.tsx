@@ -25,8 +25,6 @@ const STATE_TEXT: Record<OrbState, string> = {
 
 const PREVIEW_SIZE_CAP = 152;
 
-const NO_MORPH = new Set(['edge-glow']);
-
 const MORPH_SCALE: Record<string, number> = { 'pulse-orb': 1.5, 'siri-wave-line': 1.3, 'aurora-orb': 0.66 };
 
 const FEEDBACK_STEPS = [
@@ -51,7 +49,7 @@ export const OrbPreviewCard = ({ orb }: { orb: GalleryOrb }) => {
   const stageRef = useRef<HTMLDivElement>(null);
   const info = techInfo(orb.tech);
   const [steps] = useState(() => stepsFor(orb.id));
-  const feedback = state === 'thinking' && !NO_MORPH.has(orb.id);
+  const feedback = state === 'thinking';
   const message = useOrbMessage(feedback ? 'thinking' : 'idle', {
     messages: { thinking: steps, idle: steps[0] },
     interval: 2000,

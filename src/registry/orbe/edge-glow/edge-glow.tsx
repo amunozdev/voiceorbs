@@ -51,6 +51,7 @@ export const EdgeGlow = ({
         }),
         width: hasChildren ? '100%' : size,
         height: hasChildren ? '100%' : size,
+        ...(hasChildren ? null : { '--edge-radius': '50%' }),
       }}
     >
       <span aria-hidden className={styles.aura} />
@@ -58,12 +59,7 @@ export const EdgeGlow = ({
       <span aria-hidden className={styles.sweep} />
       <span aria-hidden className={styles.chase} />
       <div className={hasChildren ? styles.content : `${styles.content} ${styles.demo}`}>
-        {children ??
-          (size >= 96 ? (
-            <span aria-hidden className={styles.demoLabel}>
-              Your UI here
-            </span>
-          ) : null)}
+        {children}
       </div>
     </div>
   );

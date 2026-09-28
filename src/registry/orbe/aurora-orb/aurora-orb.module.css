@@ -159,6 +159,7 @@
   inset: 0;
   border-radius: 50%;
   overflow: hidden;
+  clip-path: circle(50%);
   isolation: isolate;
   background-image:
     radial-gradient(1px 1px at 21px 84px, rgb(190 214 248 / 0.5) 40%, transparent 100%),

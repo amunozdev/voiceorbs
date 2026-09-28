@@ -172,7 +172,7 @@ export const MinimalOrbTw = ({
         <span data-ring="" className="pointer-events-none absolute inset-0 rounded-full" />
         <span
           data-disc=""
-          className="absolute inset-0 overflow-hidden rounded-full will-change-[transform,opacity]"
+          className="absolute inset-0 overflow-hidden rounded-full [clip-path:circle(50%)] will-change-[transform,opacity]"
         >
           <span data-spin="" className="absolute -inset-[28%]">
             <span data-spin-turbo="" className="absolute inset-0" />

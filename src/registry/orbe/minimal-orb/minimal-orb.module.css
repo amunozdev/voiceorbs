@@ -122,6 +122,7 @@
   inset: 0;
   border-radius: 50%;
   overflow: hidden;
+  clip-path: circle(50%);
   border: 1px solid
     light-dark(
       color-mix(in oklab, var(--min-to), black 22%),

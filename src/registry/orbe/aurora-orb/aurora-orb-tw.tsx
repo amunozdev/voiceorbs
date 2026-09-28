@@ -326,7 +326,7 @@ export const AuroraOrbTw = ({
     >
       <style>{AURORA_TW_CSS}</style>
       <span data-halo="" className="absolute -inset-[24%] rounded-full" />
-      <span data-sky="" className="absolute inset-0 isolate overflow-hidden rounded-full">
+      <span data-sky="" className="absolute inset-0 isolate overflow-hidden rounded-full [clip-path:circle(50%)]">
         <span data-stars="" className="absolute inset-0" />
         <span data-veil="back" className="absolute -inset-x-[24%] -inset-y-[16%] will-change-transform">
           <span data-drift="back" className="absolute inset-y-0 will-change-transform" />

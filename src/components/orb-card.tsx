@@ -9,12 +9,15 @@ import { useAudioLevel } from '@/registry/lib/use-audio-level';
 import { useOrbCues } from '@/registry/lib/use-orb-cues';
 import {
   buildAiPrompt,
+  buildPillSnippet,
   buildUsageSnippet,
   type AdapterFilesWithCode,
   type FileWithCode,
   type PromptProvider,
 } from '@/registry/prompt';
-import { OrbPreview } from './orb-preview';
+import { OrbPill, type OrbPillSize } from '@/registry/lib/orb-pill';
+import { OrbPreview, orbComponent } from './orb-preview';
+import { pillScaleFor } from './pill-scale';
 import { CodeBlock } from './code-block';
 import { CopyButton } from './copy-button';
 import { ColorField } from './color-field';
@@ -137,6 +140,17 @@ const tailwindComponentName = (file: FileWithCode | undefined, fallback: string)
 const importPathOf = (file: FileWithCode): string =>
   `@/${file.path.replace(/^src\//, '').replace(/\.tsx?$/, '')}`;
 
+type PreviewView = 'orb' | 'pill';
+
+const PREVIEW_VIEWS: { value: PreviewView; label: string }[] = [
+  { value: 'orb', label: 'Orb' },
+  { value: 'pill', label: 'Pill' },
+];
+
+const PILL_SIZES: OrbPillSize[] = ['sm', 'md', 'lg'];
+
+const EXAMPLE_STEPS = 'Fetching prices, Running the numbers, Checking the database, Researching';
+
 export const OrbCard = ({
   orb,
   shared,
@@ -158,6 +172,8 @@ export const OrbCard = ({
   const [showPrompt, setShowPrompt] = useState(false);
   const [cues, setCues] = useState(false);
   const [variant, setVariant] = useState<StyleVariant>('css-modules');
+  const [view, setView] = useState<PreviewView>('orb');
+  const [stepsText, setStepsText] = useState('');
   const [provider, setProvider] = useStoredChoice<PromptProvider>(
     PROVIDER_STORAGE_KEY,
     PROVIDER_VALUES,
@@ -167,6 +183,7 @@ export const OrbCard = ({
   const [seenMicError, setSeenMicError] = useState<typeof micError>(null);
   const demo = useDemoCycle(setState);
   const transportHelpId = useId();
+  const stepsHelpId = useId();
   const groupLevel = hideHeader ? 'h2' : 'h3';
 
   useOrbCues(state, { enabled: cues });
@@ -197,14 +214,26 @@ export const OrbCard = ({
   const component = tailwindFile ? tailwindComponentName(tailwindFile, baseComponent) : baseComponent;
   const importPath = tailwindFile ? importPathOf(tailwindFile) : undefined;
 
+  const steps = useMemo(
+    () =>
+      stepsText
+        .split(',')
+        .map((step) => step.trim())
+        .filter(Boolean),
+    [stepsText],
+  );
+
   const usageFile = useMemo<FileWithCode>(
     () => ({
       label: 'Usage',
       path: 'usage.tsx',
       lang: 'tsx',
-      code: buildUsageSnippet(component, { state, size, speed, colorFrom, colorTo }, importPath),
+      code:
+        view === 'pill'
+          ? buildPillSnippet(component, { state, size, speed, colorFrom, colorTo }, steps, importPath, pillScaleFor(orb.id))
+          : buildUsageSnippet(component, { state, size, speed, colorFrom, colorTo }, importPath),
     }),
-    [component, importPath, state, size, speed, colorFrom, colorTo],
+    [view, component, importPath, state, size, speed, colorFrom, colorTo, steps, orb.id],
   );
 
   const codeFiles = useMemo(() => [usageFile, ...variantFiles], [usageFile, variantFiles]);
@@ -267,6 +296,9 @@ ${usageFile.code}\`\`\``,
     colorTo.toLowerCase() === orb.defaultColorTo.toLowerCase();
   const colorName = activePreset?.name ?? (isDefaultColor ? 'Default' : 'Custom');
   const pristine = isDefaultColor && size === orb.defaultSize && speed === DEFAULT_SPEED;
+  const pillSize = PILL_SIZES[Math.max(0, sizePresets.findIndex((preset) => preset.value === size))] ?? 'md';
+  const PillOrb = orbComponent(orb.id);
+  const pillScale = pillScaleFor(orb.id);
   const providerLabel = PROVIDERS.find((p) => p.value === provider)?.label ?? 'Generic';
 
   const applyPreset = (from: string, to: string) => {
@@ -293,18 +325,50 @@ ${usageFile.code}\`\`\``,
         </header>
       )}
 
-      <Group title="Preview" level={groupLevel}>
-        <div className="grid min-h-64 place-items-center rounded-xl border border-border bg-[radial-gradient(circle_at_50%_30%,var(--orb-stage-from),var(--orb-stage-to))]">
-          <OrbPreview
-            id={orb.id}
-            state={state}
-            size={size}
-            speed={speed}
-            colorFrom={colorFrom}
-            colorTo={colorTo}
-            levelRef={stageLevelRef}
-            label={orb.name}
-          />
+      <Group
+        title="Preview"
+        level={groupLevel}
+        action={
+          <div role="group" aria-label="Preview mode" className={PILL_GROUP}>
+            {PREVIEW_VIEWS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setView(option.value)}
+                aria-pressed={view === option.value}
+                className={pillButton(view === option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        <div className="grid min-h-64 place-items-center rounded-xl border border-border bg-[radial-gradient(circle_at_50%_30%,var(--orb-stage-from),var(--orb-stage-to))] px-4 text-foreground">
+          {view === 'pill' && PillOrb ? (
+            <OrbPill
+              orb={PillOrb}
+              state={state}
+              size={pillSize}
+              speed={speed}
+              colorFrom={colorFrom}
+              colorTo={colorTo}
+              levelRef={stageLevelRef}
+              messages={steps.length ? { thinking: steps } : undefined}
+              orbScale={pillScale}
+            />
+          ) : (
+            <OrbPreview
+              id={orb.id}
+              state={state}
+              size={size}
+              speed={speed}
+              colorFrom={colorFrom}
+              colorTo={colorTo}
+              levelRef={stageLevelRef}
+              label={orb.name}
+            />
+          )}
         </div>
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -357,6 +421,33 @@ ${usageFile.code}\`\`\``,
             ))}
           </div>
         </Field>
+        {view === 'pill' && (
+          <Field label="Thinking steps">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                type="text"
+                value={stepsText}
+                onChange={(event) => setStepsText(event.target.value)}
+                placeholder="Fetching prices, Running the numbers"
+                aria-describedby={stepsHelpId}
+                className="min-h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted focus-visible:outline-2 focus-visible:outline-accent sm:min-h-8 sm:max-w-sm"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setStepsText(EXAMPLE_STEPS);
+                  selectState('thinking');
+                }}
+                className={SECONDARY_BUTTON}
+              >
+                Try an example
+              </button>
+            </div>
+            <p id={stepsHelpId} className="text-muted">
+              Separate steps with commas; they rotate while the assistant is thinking.
+            </p>
+          </Field>
+        )}
         <Disclosure label="Advanced">
           <Field label="Optional states">
             <div role="group" aria-label="Optional states" className={PILL_GROUP}>

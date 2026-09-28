@@ -141,6 +141,9 @@ export const ParticlesOrb = ({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const center = size / 2;
+    const smallness = Math.min(1, size / 140);
+    const dotScale = 0.55 + 0.45 * smallness;
+    const alphaScale = smallness * smallness;
     const baseRadius = center * 0.62;
     const n = PARTICLE_COUNT;
     const px = new Float32Array(n);
@@ -281,7 +284,8 @@ export const ParticlesOrb = ({
 
         px[i] = screenX;
         py[i] = screenY;
-        pr[i] = dot;
+        pr[i] = dot * dotScale;
+        alpha *= alphaScale;
         const ab = Math.min(ALPHA_BUCKETS - 1, Math.floor(alpha * ALPHA_BUCKETS));
         const b = SPHERE.toneBucket[i] * ALPHA_BUCKETS + ab;
         bucketOf[i] = b;

@@ -66,6 +66,32 @@ export const Assistant = () => (
 `;
 };
 
+export const buildPillSnippet = (
+  componentName: string,
+  { state, speed, colorFrom, colorTo }: UsageConfig,
+  steps: readonly string[],
+  importPath?: string,
+  orbScale = 1,
+): string => {
+  const dir = componentName.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+  const messages = steps.length
+    ? `\n    messages={{ thinking: [${steps.map((step) => JSON.stringify(step)).join(', ')}] }}`
+    : '';
+  return `import { OrbPill } from '@/registry/lib/orb-pill';
+import { ${componentName} } from '${importPath ?? `@/registry/orbe/${dir}/${dir}`}';
+
+export const AssistantStatus = () => (
+  <OrbPill
+    orb={${componentName}}
+    state="${state}"
+    speed={${speed}}
+    colorFrom="${colorFrom}"
+    colorTo="${colorTo}"${orbScale === 1 ? '' : `\n    orbScale={${orbScale}}`}${messages}
+  />
+);
+`;
+};
+
 export const buildAiPrompt = (
   name: string,
   dependencies: string[],

@@ -1,0 +1,176 @@
+.pill {
+  --pill-gap: 10px;
+  --pill-pad: 6px;
+  --pill-font: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pill-gap);
+  padding: var(--pill-pad) calc(var(--pill-pad) * 2.6) var(--pill-pad) var(--pill-pad);
+  border-radius: 999px;
+  border: 1px solid var(--orb-pill-border, color-mix(in oklab, currentColor 14%, transparent));
+  background: var(--orb-pill-bg, color-mix(in oklab, currentColor 5%, transparent));
+  box-shadow: 0 10px 30px -18px color-mix(in oklab, currentColor 45%, transparent);
+  color: var(--orb-pill-fg, inherit);
+  font-size: var(--pill-font);
+  font-weight: 560;
+  line-height: 1.2;
+  max-width: 100%;
+  transition: opacity 0.6s ease;
+}
+
+.pill[data-size='sm'] {
+  --pill-gap: 8px;
+  --pill-pad: 4px;
+  --pill-font: 12.5px;
+}
+
+.pill[data-size='lg'] {
+  --pill-gap: 14px;
+  --pill-pad: 8px;
+  --pill-font: 18px;
+}
+
+.pill[data-state='disabled'] {
+  opacity: 0.6;
+}
+
+.orb {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.orb > * {
+  flex: none;
+}
+
+.copy {
+  position: relative;
+  display: inline-block;
+  height: 1.3em;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: width 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.measure {
+  position: absolute;
+  visibility: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.line {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.base {
+  display: inline-flex;
+  color: color-mix(in oklab, currentColor 72%, transparent);
+  transition: color 0.4s ease;
+}
+
+.copy[data-shimmer] .base {
+  color: color-mix(in oklab, currentColor 48%, transparent);
+}
+
+.char {
+  display: inline-block;
+  animation: char-in 0.46s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--i) * 18ms);
+}
+
+.leaving {
+  animation: line-out 0.28s ease-in both;
+  color: color-mix(in oklab, currentColor 55%, transparent);
+}
+
+.sheen {
+  position: absolute;
+  inset: 0;
+  color: transparent;
+  background-image: linear-gradient(
+    105deg,
+    transparent 0% 38%,
+    currentColor 49%,
+    color-mix(in oklab, currentColor 60%, transparent) 56%,
+    transparent 68% 100%
+  );
+  background-size: 260% 100%;
+  background-position: 135% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  animation: sweep 2.35s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.copy[data-shimmer] .sheen {
+  opacity: 1;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@keyframes char-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.45em);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes line-out {
+  to {
+    opacity: 0;
+    transform: translateY(-0.5em);
+    filter: blur(4px);
+  }
+}
+
+@keyframes sweep {
+  0%,
+  12% {
+    background-position: 135% 0;
+  }
+  70%,
+  100% {
+    background-position: -55% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .char,
+  .leaving {
+    animation-duration: 0.01ms;
+    animation-delay: 0ms;
+  }
+
+  .copy {
+    transition: none;
+  }
+
+  .sheen {
+    animation: none;
+    background-position: 50% 0;
+  }
+}

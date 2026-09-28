@@ -6,7 +6,9 @@ import clsx from 'clsx';
 import { ORB_STATES, type OrbState } from '@/registry/lib/orb-state';
 import { observeActivity } from '@/registry/lib/use-in-view';
 import { useReducedMotion } from '@/registry/lib/use-reduced-motion';
-import { OrbPreview } from './orb-preview';
+import { useOrbMessage } from '@/registry/lib/orb-pill';
+import { OrbMorphStage } from './orb-morph-stage';
+import { pillScaleFor } from './pill-scale';
 import { ArrowRightIcon } from './orb-icons';
 import { techInfo } from './tech-info';
 import { useStateCycle } from './use-demo-cycle';
@@ -24,12 +26,29 @@ const STATE_TEXT: Record<OrbState, string> = {
 
 const PREVIEW_SIZE_CAP = 152;
 
+const FEEDBACK_STEPS = [
+  'Fetching prices',
+  'Running the numbers',
+  'Checking the database',
+  'Researching sources',
+  'Drafting a reply',
+];
+
+const stepsFor = (id: string): string[] => {
+  let hash = 0;
+  for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  const start = hash % FEEDBACK_STEPS.length;
+  return [FEEDBACK_STEPS[start], FEEDBACK_STEPS[(start + 2) % FEEDBACK_STEPS.length]];
+};
+
 export const OrbPreviewCard = ({ orb }: { orb: GalleryOrb }) => {
   const [state, setState] = useState<OrbState>('idle');
   const [inView, setInView] = useState(true);
   const reducedMotion = useReducedMotion();
   const stageRef = useRef<HTMLDivElement>(null);
   const info = techInfo(orb.tech);
+  const [steps] = useState(() => stepsFor(orb.id));
+  const message = useOrbMessage('thinking', { messages: { thinking: steps }, interval: 1700 });
 
   useEffect(() => {
     const el = stageRef.current;
@@ -60,13 +79,16 @@ export const OrbPreviewCard = ({ orb }: { orb: GalleryOrb }) => {
         ref={stageRef}
         className="relative grid min-h-56 place-items-center overflow-hidden rounded-xl border border-border bg-[radial-gradient(circle_at_50%_30%,var(--orb-stage-from),var(--orb-stage-to))]"
       >
-        <OrbPreview
+        <OrbMorphStage
           id={orb.id}
           state={state}
           size={Math.min(orb.defaultSize, PREVIEW_SIZE_CAP)}
           colorFrom={orb.defaultColorFrom}
           colorTo={orb.defaultColorTo}
           label={`${orb.name} preview`}
+          feedback={state === 'thinking'}
+          message={message}
+          orbScale={pillScaleFor(orb.id)}
         />
         <div
           aria-hidden="true"

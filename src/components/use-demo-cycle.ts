@@ -11,7 +11,7 @@ interface DemoStep {
 const DEMO_STEPS: DemoStep[] = [
   { state: 'connecting', duration: 900 },
   { state: 'listening', duration: 2500 },
-  { state: 'thinking', duration: 1400 },
+  { state: 'thinking', duration: 3600 },
   { state: 'speaking', duration: 3000 },
   { state: 'idle', duration: 1600 },
 ];

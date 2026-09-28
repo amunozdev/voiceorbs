@@ -134,3 +134,5 @@ export const OrbPreview = ({ id, ...props }: OrbPreviewProps) => {
   const Orb = MAP[id];
   return Orb ? <Orb {...props} /> : null;
 };
+
+export const orbComponent = (id: string): ComponentType<OrbProps> | undefined => DEFERRED_MAP[id] ?? MAP[id];

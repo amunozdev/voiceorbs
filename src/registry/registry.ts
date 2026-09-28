@@ -30,6 +30,8 @@ const SHARED_FILES: OrbFile[] = [
   { label: 'lib/orb-color.ts', path: 'src/registry/lib/orb-color.ts', lang: 'ts' },
   { label: 'lib/use-reduced-motion.ts', path: 'src/registry/lib/use-reduced-motion.ts', lang: 'ts' },
   { label: 'lib/use-orb-animator.ts', path: 'src/registry/lib/use-orb-animator.ts', lang: 'ts' },
+  { label: 'lib/orb-pill.tsx', path: 'src/registry/lib/orb-pill.tsx', lang: 'tsx' },
+  { label: 'lib/orb-pill.module.css', path: 'src/registry/lib/orb-pill.module.css', lang: 'css' },
 ];
 
 export { SHARED_FILES };
@@ -312,9 +314,6 @@ export const orbs: OrbMeta[] = [
       { label: 'mercury-orb.tsx', path: 'src/registry/orbe/mercury-orb/mercury-orb.tsx', lang: 'tsx' },
     ],
   },
-];
-
-export const draftOrbs: OrbMeta[] = [
   {
     id: 'minimal-orb',
     name: 'Minimal Orb',
@@ -331,19 +330,6 @@ export const draftOrbs: OrbMeta[] = [
     ],
   },
   {
-    id: 'radiance-orb',
-    name: 'Radiance Orb',
-    tagline: 'Radial gradient shader whose focus and falloff breathe with your voice.',
-    tech: 'Shader (canvas)',
-    dependencies: ['@paper-design/shaders-react'],
-    defaultColorFrom: '#fb7185',
-    defaultColorTo: '#7c3aed',
-    defaultSize: 168,
-    files: [
-      { label: 'radiance-orb.tsx', path: 'src/registry/orbe/radiance-orb/radiance-orb.tsx', lang: 'tsx' },
-    ],
-  },
-  {
     id: 'dither-orb',
     name: 'Dither Orb',
     tagline: 'Retro ordered-dithering shader: a glowing sphere rendered in dancing dots.',
@@ -354,19 +340,6 @@ export const draftOrbs: OrbMeta[] = [
     defaultSize: 168,
     files: [
       { label: 'dither-orb.tsx', path: 'src/registry/orbe/dither-orb/dither-orb.tsx', lang: 'tsx' },
-    ],
-  },
-  {
-    id: 'dot-orbit',
-    name: 'Dot Orbit',
-    tagline: 'Swarms of dots orbit the core and speed up when you speak.',
-    tech: 'Shader (canvas)',
-    dependencies: ['@paper-design/shaders-react'],
-    defaultColorFrom: '#60a5fa',
-    defaultColorTo: '#c084fc',
-    defaultSize: 168,
-    files: [
-      { label: 'dot-orbit.tsx', path: 'src/registry/orbe/dot-orbit/dot-orbit.tsx', lang: 'tsx' },
     ],
   },
   {
@@ -396,19 +369,6 @@ export const draftOrbs: OrbMeta[] = [
     ],
   },
   {
-    id: 'duotone-flow',
-    name: 'Duotone Flow',
-    tagline: 'Two-color flowing disc: your voice ripples the rings, the agent voice stirs the core. Raw WebGL, zero dependencies.',
-    tech: 'Shader (canvas)',
-    dependencies: [],
-    defaultColorFrom: '#38bdf8',
-    defaultColorTo: '#f472b6',
-    defaultSize: 168,
-    files: [
-      { label: 'duotone-flow.tsx', path: 'src/registry/orbe/duotone-flow/duotone-flow.tsx', lang: 'tsx' },
-    ],
-  },
-  {
     id: 'aura-field',
     name: 'Aura Field',
     tagline: 'Undulating ring of energy that springs open when it starts listening. Raw WebGL, zero dependencies.',
@@ -432,6 +392,48 @@ export const draftOrbs: OrbMeta[] = [
     defaultSize: 168,
     files: [
       { label: 'siri-wave-line.tsx', path: 'src/registry/orbe/siri-wave-line/siri-wave-line.tsx', lang: 'tsx' },
+    ],
+  },
+];
+
+export const draftOrbs: OrbMeta[] = [
+  {
+    id: 'radiance-orb',
+    name: 'Radiance Orb',
+    tagline: 'Radial gradient shader whose focus and falloff breathe with your voice.',
+    tech: 'Shader (canvas)',
+    dependencies: ['@paper-design/shaders-react'],
+    defaultColorFrom: '#fb7185',
+    defaultColorTo: '#7c3aed',
+    defaultSize: 168,
+    files: [
+      { label: 'radiance-orb.tsx', path: 'src/registry/orbe/radiance-orb/radiance-orb.tsx', lang: 'tsx' },
+    ],
+  },
+  {
+    id: 'dot-orbit',
+    name: 'Dot Orbit',
+    tagline: 'Swarms of dots orbit the core and speed up when you speak.',
+    tech: 'Shader (canvas)',
+    dependencies: ['@paper-design/shaders-react'],
+    defaultColorFrom: '#60a5fa',
+    defaultColorTo: '#c084fc',
+    defaultSize: 168,
+    files: [
+      { label: 'dot-orbit.tsx', path: 'src/registry/orbe/dot-orbit/dot-orbit.tsx', lang: 'tsx' },
+    ],
+  },
+  {
+    id: 'duotone-flow',
+    name: 'Duotone Flow',
+    tagline: 'Two-color flowing disc: your voice ripples the rings, the agent voice stirs the core. Raw WebGL, zero dependencies.',
+    tech: 'Shader (canvas)',
+    dependencies: [],
+    defaultColorFrom: '#38bdf8',
+    defaultColorTo: '#f472b6',
+    defaultSize: 168,
+    files: [
+      { label: 'duotone-flow.tsx', path: 'src/registry/orbe/duotone-flow/duotone-flow.tsx', lang: 'tsx' },
     ],
   },
 ];

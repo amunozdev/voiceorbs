@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import {
-  approach,
-  createStateMix,
+  blendStates,
+  clamp01,
   ERROR_COLOR_FROM,
   ERROR_COLOR_TO,
   hexToRgb,
@@ -11,8 +11,8 @@ import {
   type OrbProps,
   type OrbState,
 } from '../../lib/orb-state';
-import { observeActivity } from '../../lib/use-in-view';
-import { useOrbLevel } from '../../lib/use-orb-level';
+import { mixRgb as mix, rgba, type Rgb } from '../../lib/orb-color';
+import { useOrbAnimator, type OrbFrame } from '../../lib/use-orb-animator';
 
 const TWO_PI = Math.PI * 2;
 const LAYER_COUNTS = [60, 60, 30];
@@ -22,8 +22,9 @@ const RIM_OMEGA = 0.15;
 const ARM_K = 2.35;
 const ARM_R0 = 0.16;
 const DUST_COUNT = 360;
-
-type Rgb = [number, number, number];
+const TIME_OFFSET = 5.3;
+const ALPHA_BUCKETS = 8;
+const TINTS = 3;
 
 const WHITE: Rgb = [255, 255, 255];
 const DUST_WHITE: Rgb = [235, 240, 255];
@@ -41,38 +42,33 @@ interface Star {
   glow: boolean;
 }
 
-const mix = (a: Rgb, b: Rgb, t: number): Rgb => [
-  a[0] + (b[0] - a[0]) * t,
-  a[1] + (b[1] - a[1]) * t,
-  a[2] + (b[2] - a[2]) * t,
-];
-
 const ERROR_RGB: Rgb = mix(hexToRgb(ERROR_COLOR_FROM), hexToRgb(ERROR_COLOR_TO), 0.5);
 
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-
-const spinFor = (st: OrbState): number =>
-  st === 'thinking' ? 3.2 : st === 'connecting' ? 1.6 : st === 'error' ? 0.5 : st === 'disabled' ? 0.3 : 1;
-
-const staticLevelFor = (st: OrbState): number => {
-  switch (st) {
-    case 'listening':
-      return 0.78;
-    case 'speaking':
-      return 0.92;
-    case 'thinking':
-      return 0.45;
-    case 'connecting':
-      return 0.2;
-    case 'error':
-      return 0.3;
-    default:
-      return 0;
-  }
+type StateParams = {
+  tempo: number;
+  spin: number;
+  rest: number;
+  nebGain: number;
+  rimGain: number;
+  coreGain: number;
+  armsGain: number;
+  think: number;
+  thinkRate: number;
+  reveal: number;
+  error: number;
+  dim: number;
+  bloom: number;
 };
 
-const rgba = (c: Rgb, a: number) =>
-  `rgba(${Math.round(c[0])}, ${Math.round(c[1])}, ${Math.round(c[2])}, ${clamp01(a).toFixed(3)})`;
+const STATES: Record<OrbState, StateParams> = {
+  idle: { tempo: 1, spin: 1, rest: 0, nebGain: 0, rimGain: 0.2, coreGain: 0, armsGain: 0, think: 0, thinkRate: 1, reveal: 0, error: 0, dim: 0, bloom: 0 },
+  connecting: { tempo: 1, spin: 1.6, rest: 0.2, nebGain: 0, rimGain: 0.2, coreGain: 0, armsGain: 0, think: 0.45, thinkRate: 0.5, reveal: 1, error: 0, dim: 0, bloom: 0 },
+  listening: { tempo: 1, spin: 1.1, rest: 0.78, nebGain: 0.35, rimGain: 1, coreGain: 0, armsGain: 0, think: 0, thinkRate: 1, reveal: 0, error: 0, dim: 0, bloom: 0.1 },
+  thinking: { tempo: 1, spin: 3.2, rest: 0.45, nebGain: 0, rimGain: 0.2, coreGain: 0, armsGain: 0, think: 1, thinkRate: 1, reveal: 0, error: 0, dim: 0, bloom: 0 },
+  speaking: { tempo: 1, spin: 1.4, rest: 0.92, nebGain: 0, rimGain: 0.3, coreGain: 1, armsGain: 1, think: 0, thinkRate: 1, reveal: 0, error: 0, dim: 0, bloom: 0.14 },
+  error: { tempo: 1, spin: 0.5, rest: 0.3, nebGain: 0, rimGain: 0, coreGain: 0, armsGain: 0, think: 0, thinkRate: 1, reveal: 0, error: 1, dim: 0, bloom: 0 },
+  disabled: { tempo: 0.05, spin: 0.3, rest: 0, nebGain: 0, rimGain: 0, coreGain: 0, armsGain: 0, think: 0, thinkRate: 1, reveal: 0, error: 0, dim: 1, bloom: 0 },
+};
 
 const rand = (seed: number) => {
   const x = Math.sin(seed * 12.9898) * 43758.5453;
@@ -135,11 +131,6 @@ const buildStars = (): Star[] => {
 };
 
 const STARS = buildStars();
-const STAR_LAYERS: [Star[], Star[], Star[]] = [
-  STARS.filter((s) => s.layer === 0),
-  STARS.filter((s) => s.layer === 1),
-  STARS.filter((s) => s.layer === 2),
-];
 
 export const GalaxyOrb = ({
   state = 'idle',
@@ -154,10 +145,8 @@ export const GalaxyOrb = ({
 }: OrbProps) => {
   const ref = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stateRef = useRef(state);
-  const speedRef = useRef(speed);
   const colorRef = useRef({ from: colorFrom, to: colorTo });
-  const redrawRef = useRef<(() => void) | null>(null);
+  const drawRef = useRef<((frame: OrbFrame) => void) | null>(null);
 
   const setRootRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -168,14 +157,13 @@ export const GalaxyOrb = ({
     [refProp],
   );
 
-  useEffect(() => {
-    stateRef.current = state;
-    speedRef.current = speed;
-    colorRef.current = { from: colorFrom, to: colorTo };
-    redrawRef.current?.();
-  });
+  const onFrame = useCallback((frame: OrbFrame) => drawRef.current?.(frame), []);
+  const { frameRef } = useOrbAnimator(ref, { state, levelRef, speed, onFrame });
 
-  useOrbLevel(ref, state, levelRef);
+  useEffect(() => {
+    colorRef.current = { from: colorFrom, to: colorTo };
+    drawRef.current?.({ ...frameRef.current, dt: 0 });
+  }, [colorFrom, colorTo, frameRef]);
 
   useEffect(() => {
     const host = ref.current;
@@ -259,6 +247,10 @@ export const GalaxyOrb = ({
     let tintCols: [Rgb, Rgb, Rgb] = [WHITE, WHITE, WHITE];
     let abFrom = '';
     let abTo = '';
+    const tintStyles: string[] = ['#fff', '#fff', '#fff'];
+    const rimStyles: string[] = new Array<string>(48).fill('#fff');
+    const errRimStyle = rgba(ERROR_RGB, 1);
+    let thinkG: CanvasGradient | null = null;
     let bloomG: CanvasGradient | null = null;
     let fresG: CanvasGradient | null = null;
     let bounceG: CanvasGradient | null = null;
@@ -407,6 +399,18 @@ export const GalaxyOrb = ({
       tintCols = [[246, 248, 255], mix(to, WHITE, 0.5), mix(from, WHITE, 0.5)];
       abFrom = rgba(from, 0.5);
       abTo = rgba(to, 0.5);
+      for (let k = 0; k < TINTS; k += 1) tintStyles[k] = rgba(tintCols[k], 1);
+      if (!supportsConic) {
+        for (let k = 0; k < rimStyles.length; k += 1) {
+          rimStyles[k] = rgba(rimColorAt(k / rimStyles.length, from, to), 1);
+        }
+      }
+
+      const thinkC = mix(mix(from, to, 0.4), WHITE, 0.55);
+      thinkG = ctx.createRadialGradient(0, 0, 0, 0, 0, R * 0.36);
+      thinkG.addColorStop(0, rgba(WHITE, 0.95));
+      thinkG.addColorStop(0.3, rgba(thinkC, 0.6));
+      thinkG.addColorStop(1, rgba(thinkC, 0));
 
       bloomG = ctx.createRadialGradient(cx, cy, R * 0.7, cx, cy, R * 1.16);
       bloomG.addColorStop(0, rgba(midTone, 0));
@@ -449,14 +453,20 @@ export const GalaxyOrb = ({
     let spriteA = -0.9;
     const layerOff = [0, 0, 0];
     let rimOff = 0;
-    let raf = 0;
-    let last: number | null = null;
-    let t = 0;
-    let running = false;
-    let spinCur = spinFor(stateRef.current);
-    let levelS = 0;
-    let connectT = 0;
-    const stateMix = createStateMix(stateRef.current);
+    let clock = 0;
+    let thinkClock = 0;
+    let revealClock = 0;
+    let lastPhase = frameRef.current.phase;
+    let lastLevelText = '';
+    const starCount = STARS.length;
+    const splitAt = LAYER_COUNTS[0];
+    const buckets = TINTS * ALPHA_BUCKETS;
+    const counts = new Uint16Array(buckets);
+    const starts = new Uint16Array(buckets);
+    const order = new Uint16Array(starCount);
+    const bucketOf = new Uint8Array(starCount);
+    const starX = new Float32Array(starCount);
+    const starY = new Float32Array(starCount);
 
     const drawSprite = (img: HTMLCanvasElement, scale: number, alpha: number) => {
       ctx.save();
@@ -468,51 +478,130 @@ export const GalaxyOrb = ({
       ctx.restore();
     };
 
-    const render = (dt: number, isStatic = false) => {
+    const revealVis = (head: number, u: number): number => {
+      const d = (((head - u) % 1) + 1) % 1;
+      if (d < 0.06) return 0.15 + 0.85 * (d / 0.06);
+      const trail = 1 - (d - 0.06) / 0.94;
+      return 0.15 + 0.85 * trail * Math.sqrt(trail);
+    };
+
+    const drawStars = (
+      start: number,
+      end: number,
+      Rl: number,
+      t: number,
+      starBoost: number,
+      reveal: number,
+      head: number,
+    ) => {
+      counts.fill(0);
+      for (let i = start; i < end; i += 1) {
+        const sr = STARS[i];
+        const vis = reveal > 0.004 ? 1 + (revealVis(head, sr.u) - 1) * reveal : 1;
+        const tw = sr.twinkle > 0 ? 0.68 + 0.32 * Math.sin(t * sr.twinkle + sr.phase) : 1;
+        const alpha = clamp01(sr.bright * tw * starBoost * vis);
+        if (alpha <= 0.004) {
+          bucketOf[i] = 255;
+          continue;
+        }
+        const ang = sr.a + layerOff[sr.layer];
+        const rr = sr.r * Rl;
+        const x = cx + Math.cos(ang) * rr;
+        const y = cy + Math.sin(ang) * rr;
+        starX[i] = x;
+        starY[i] = y;
+        if (sr.glow) {
+          const len = sr.size * 3;
+          ctx.globalAlpha = alpha * 0.3;
+          ctx.strokeStyle = tintStyles[sr.tint];
+          ctx.lineWidth = 0.7;
+          ctx.beginPath();
+          ctx.moveTo(x - len, y);
+          ctx.lineTo(x + len, y);
+          ctx.moveTo(x, y - len);
+          ctx.lineTo(x, y + len);
+          ctx.stroke();
+          ctx.globalAlpha = alpha * 0.16;
+          ctx.fillStyle = tintStyles[sr.tint];
+          ctx.beginPath();
+          ctx.arc(x, y, sr.size * 2.1, 0, TWO_PI);
+          ctx.fill();
+        }
+        const b = sr.tint * ALPHA_BUCKETS + Math.min(ALPHA_BUCKETS - 1, Math.floor(alpha * ALPHA_BUCKETS));
+        bucketOf[i] = b;
+        counts[b] += 1;
+      }
+      let acc = 0;
+      for (let b = 0; b < buckets; b += 1) {
+        starts[b] = acc;
+        acc += counts[b];
+      }
+      for (let i = start; i < end; i += 1) {
+        const b = bucketOf[i];
+        if (b === 255) continue;
+        order[starts[b]] = i;
+        starts[b] += 1;
+      }
+      let cursor = 0;
+      for (let b = 0; b < buckets; b += 1) {
+        const count = counts[b];
+        if (count === 0) continue;
+        const ab = b % ALPHA_BUCKETS;
+        ctx.globalAlpha = (ab + 0.5) / ALPHA_BUCKETS;
+        ctx.fillStyle = tintStyles[(b - ab) / ALPHA_BUCKETS];
+        ctx.beginPath();
+        for (let k = cursor; k < cursor + count; k += 1) {
+          const i = order[k];
+          const s = STARS[i].size;
+          ctx.moveTo(starX[i] + s, starY[i]);
+          ctx.arc(starX[i], starY[i], s, 0, TWO_PI);
+        }
+        ctx.fill();
+        cursor += count;
+      }
+      ctx.globalAlpha = 1;
+    };
+
+    const draw = (frame: OrbFrame) => {
       ensurePalette();
-      const st = stateRef.current;
-      const spd = speedRef.current;
-      const anim = !isStatic;
-      const easeDt = isStatic ? 60 : dt;
-      const w = stateMix.update(st, easeDt);
-      const wError = w.error;
-      const wDisabled = w.disabled;
-      const wSpeak = w.speaking;
-      const wListen = w.listening;
-      const wConn = w.connecting;
-      const rawLevel = anim
-        ? clamp01(Number.parseFloat(getComputedStyle(host).getPropertyValue('--orb-level')) || 0)
-        : staticLevelFor(st);
-      levelS = approach(levelS, rawLevel, 8, easeDt);
-      const level = clamp01(levelS);
-      spinCur = approach(spinCur, spinFor(st), 6, easeDt);
-      const drive = dt * spd * spinCur;
+      const w = frame.weights;
+      const p = blendStates(w, STATES);
+      const dPhase = Math.max(0, frame.phase - lastPhase);
+      lastPhase = frame.phase;
+      const levelText = frame.level.toFixed(3);
+      if (levelText !== lastLevelText) {
+        lastLevelText = levelText;
+        host.style.setProperty('--orb-level', levelText);
+      }
+      const level = clamp01(frame.reduced ? p.rest : frame.level);
+      const wError = p.error;
+      const wDisabled = p.dim;
+      const wReveal = clamp01(p.reveal);
+      const think = p.think;
+
+      clock += dPhase * p.tempo;
+      thinkClock += dPhase * p.tempo * p.thinkRate;
+      revealClock += dPhase * 0.4;
+      const t = clock + TIME_OFFSET;
+      const drive = dPhase * p.spin;
       spriteA += SPRITE_OMEGA * drive;
-      rimOff += RIM_OMEGA * dt * spd;
+      rimOff += RIM_OMEGA * dPhase * p.tempo;
       for (let k = 0; k < layerOff.length; k += 1) layerOff[k] += LAYER_OMEGA[k] * drive;
 
-      const breathe = 1 + 0.008 * Math.sin(t * 1.15 * spd) + level * 0.006;
+      const beatBase = 0.5 + 0.5 * Math.sin((thinkClock + TIME_OFFSET) * 4.2);
+      const beat = beatBase * beatBase;
+      const head = revealClock % 1;
+
+      const breathe = 1 + 0.008 * Math.sin(t * 1.15) + level * 0.006;
       const Rl = R * breathe;
 
-      let reveal = 1;
-      let revealFade = 1;
-      if (wConn > 0.004) {
-        if (anim) {
-          connectT += dt * spd;
-          const cyc = (connectT * 0.55) % 1.4;
-          reveal = Math.min(1.15, cyc / 0.95);
-          revealFade = cyc > 1.25 ? Math.max(0.15, 1 - ((cyc - 1.25) / 0.15) * 0.85) : 1;
-        } else {
-          reveal = 0.55;
-        }
-      } else {
-        connectT = 0;
-      }
-
-      const jAmp = anim ? wError : 0;
+      const jAmp = frame.reduced ? 0 : wError;
       const jx = jAmp > 0.004 ? (Math.sin(t * 29.3) * 0.9 + Math.sin(t * 17.1) * 0.6) * jAmp : 0;
       const jy = jAmp > 0.004 ? (Math.cos(t * 23.7) * 0.9 + Math.sin(t * 13.3) * 0.6) * jAmp : 0;
 
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
       ctx.clearRect(0, 0, size, size);
 
       ctx.save();
@@ -525,9 +614,7 @@ export const GalaxyOrb = ({
       ctx.restore();
 
       if (bloomG) {
-        ctx.globalAlpha = clamp01(
-          (0.22 + level * 0.14 * wSpeak) * (1 - 0.4 * wError - 0.5 * wDisabled),
-        );
+        ctx.globalAlpha = clamp01((0.22 + level * p.bloom) * (1 - 0.4 * wError - 0.5 * wDisabled));
         ctx.fillStyle = bloomG;
         ctx.fillRect(0, 0, size, size);
         ctx.globalAlpha = 1;
@@ -544,53 +631,34 @@ export const GalaxyOrb = ({
 
       ctx.globalCompositeOperation = 'lighter';
       const starBoost = (0.68 + level * 0.5) * (1 - 0.15 * wError);
-      const drawStar = (sr: Star) => {
-        const vis =
-          wConn > 0.004 ? 1 + (clamp01((reveal - sr.u) * 10) * revealFade - 1) * wConn : 1;
-        if (vis <= 0.004) return;
-        const ang = sr.a + layerOff[sr.layer];
-        const rr = sr.r * Rl;
-        const x = cx + Math.cos(ang) * rr;
-        const y = cy + Math.sin(ang) * rr;
-        const tw = sr.twinkle > 0 ? 0.68 + 0.32 * Math.sin(t * sr.twinkle * spd + sr.phase) : 1;
-        const alpha = clamp01(sr.bright * tw * starBoost * vis);
-        const col = tintCols[sr.tint];
-        if (sr.glow) {
-          const len = sr.size * 3;
-          ctx.strokeStyle = rgba(col, alpha * 0.3);
-          ctx.lineWidth = 0.7;
-          ctx.beginPath();
-          ctx.moveTo(x - len, y);
-          ctx.lineTo(x + len, y);
-          ctx.moveTo(x, y - len);
-          ctx.lineTo(x, y + len);
-          ctx.stroke();
-          ctx.fillStyle = rgba(col, alpha * 0.16);
-          ctx.beginPath();
-          ctx.arc(x, y, sr.size * 2.1, 0, TWO_PI);
-          ctx.fill();
-        }
-        ctx.fillStyle = rgba(col, alpha);
-        ctx.beginPath();
-        ctx.arc(x, y, sr.size, 0, TWO_PI);
-        ctx.fill();
-      };
+      drawStars(0, splitAt, Rl, t, starBoost, wReveal, head);
 
-      for (const sr of STAR_LAYERS[0]) drawStar(sr);
-
-      const nebScale = 1 + wListen * level * 0.35 + (1 - wListen) * 0.02 * Math.sin(t * 0.6);
-      const nebBase = 0.9 + level * 0.1 * wSpeak;
-      const nebConn = 0.3 + 0.7 * Math.min(1, reveal) * revealFade;
-      const nebAlpha = nebBase + wConn * (nebConn - nebBase) + wError * (0.5 - nebBase);
+      const wobble = (1 - w.listening) * 0.02 * Math.sin(t * 0.6);
+      const nebScale = 1 + p.nebGain * level + wobble - think * 0.08 * beat;
+      const nebBase = 0.9 + level * 0.1 * p.armsGain;
+      const nebConn = 0.55 + 0.25 * Math.sin(head * TWO_PI);
+      const nebAlpha = nebBase + wReveal * (nebConn - nebBase) + wError * (0.5 - nebBase);
       drawSprite(spriteNebula, nebScale, nebAlpha);
-      const armsBase = 0.88 + level * 0.12 * wSpeak + (anim ? 0 : 0.25 * w.thinking);
-      const armScale = anim ? 1 : 1 + 0.08 * w.thinking;
+      const armsBase = 0.88 + level * 0.12 * p.armsGain + think * (0.08 + 0.22 * beat);
+      const armScale = 1 - think * (0.03 + 0.11 * beat);
       drawSprite(spriteArms, armScale, armsBase + wError * (0.65 - armsBase));
 
-      for (const sr of STAR_LAYERS[1]) drawStar(sr);
-      for (const sr of STAR_LAYERS[2]) drawStar(sr);
+      drawStars(splitAt, starCount, Rl, t, starBoost, wReveal, head);
 
-      const speakA = level * 0.15 * wSpeak;
+      const thinkA = think * (0.18 + 0.72 * beat);
+      if (thinkG && thinkA > 0.004) {
+        const k = 0.7 + 0.55 * beat;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(k, k);
+        ctx.globalAlpha = clamp01(thinkA);
+        ctx.fillStyle = thinkG;
+        ctx.beginPath();
+        ctx.arc(0, 0, R * 0.36, 0, TWO_PI);
+        ctx.fill();
+        ctx.restore();
+      }
+      const speakA = level * 0.22 * p.coreGain;
       if (speakG && speakA > 0.004) {
         ctx.globalAlpha = speakA;
         ctx.fillStyle = speakG;
@@ -606,7 +674,7 @@ export const GalaxyOrb = ({
       ctx.restore();
 
       ctx.globalCompositeOperation = 'screen';
-      const fresA = clamp01(0.45 + level * 0.12 * wSpeak);
+      const fresA = clamp01(0.45 + level * 0.12 * (p.coreGain + p.rimGain * 0.5));
       if (fresG && fresA * (1 - wError) > 0.004) {
         ctx.globalAlpha = fresA * (1 - wError);
         ctx.fillStyle = fresG;
@@ -657,16 +725,19 @@ export const GalaxyOrb = ({
       }
       ctx.restore();
 
-      const rimW = 2 + level;
+      const rimW = 2 + level * (0.5 + p.rimGain * 1.5);
       const rimR = Rl - rimW / 2 - 0.35;
-      const rimA = clamp01((0.5 + level * 0.45) * (1 - 0.55 * wDisabled)) * (1 - wError);
+      const rimA =
+        clamp01((0.5 + level * (0.15 + p.rimGain * 0.4)) * (1 - 0.55 * wDisabled)) * (1 - wError);
       ctx.globalCompositeOperation = 'screen';
       if (wError > 0.004) {
-        ctx.strokeStyle = rgba(ERROR_RGB, (0.55 + 0.3 * Math.sin(t * 9)) * wError);
+        ctx.globalAlpha = clamp01((0.55 + 0.3 * Math.sin(t * 9)) * wError);
+        ctx.strokeStyle = errRimStyle;
         ctx.lineWidth = 2.4;
         ctx.beginPath();
         ctx.arc(cx, cy, rimR, 0, TWO_PI);
         ctx.stroke();
+        ctx.globalAlpha = 1;
       }
       if (rimA > 0.004) {
         if (rimG) {
@@ -681,12 +752,12 @@ export const GalaxyOrb = ({
           ctx.stroke();
           ctx.restore();
         } else {
-          const seg = 48;
+          const seg = rimStyles.length;
           ctx.lineWidth = rimW;
+          ctx.globalAlpha = rimA;
           for (let i = 0; i < seg; i += 1) {
-            const u = i / seg;
-            const a0 = rimOff + u * TWO_PI;
-            ctx.strokeStyle = rgba(rimColorAt(u, from, to), rimA);
+            const a0 = rimOff + (i / seg) * TWO_PI;
+            ctx.strokeStyle = rimStyles[i];
             ctx.beginPath();
             ctx.arc(cx, cy, rimR, a0, a0 + (TWO_PI / seg) * 1.5);
             ctx.stroke();
@@ -707,70 +778,13 @@ export const GalaxyOrb = ({
       ctx.globalCompositeOperation = 'source-over';
     };
 
-    const frame = (now: number) => {
-      if (last === null) last = now;
-      const dt = Math.min((now - last) / 1000, 0.1);
-      last = now;
-      t += dt;
-      render(dt);
-      raf = requestAnimationFrame(frame);
-    };
-
-    const renderStatic = () => {
-      if (t === 0) t = 5.3;
-      render(0, true);
-    };
-
-    const startLoop = () => {
-      if (running) return;
-      running = true;
-      last = null;
-      raf = requestAnimationFrame(frame);
-    };
-
-    const stopLoop = () => {
-      running = false;
-      cancelAnimationFrame(raf);
-    };
-
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    let reduced = mq.matches;
-    let active = true;
-
-    const applyMotion = () => {
-      if (reduced) {
-        stopLoop();
-        renderStatic();
-      } else if (active) {
-        startLoop();
-      } else {
-        stopLoop();
-      }
-    };
-
-    const onMotionChange = () => {
-      reduced = mq.matches;
-      applyMotion();
-    };
-
-    const unobserve = observeActivity(host, (next) => {
-      active = next;
-      applyMotion();
-    });
-
-    applyMotion();
-    mq.addEventListener('change', onMotionChange);
-    redrawRef.current = () => {
-      if (reduced) renderStatic();
-    };
+    drawRef.current = draw;
+    draw({ ...frameRef.current, dt: 0 });
 
     return () => {
-      stopLoop();
-      unobserve();
-      mq.removeEventListener('change', onMotionChange);
-      redrawRef.current = null;
+      drawRef.current = null;
     };
-  }, [size]);
+  }, [size, frameRef]);
 
   return (
     <div

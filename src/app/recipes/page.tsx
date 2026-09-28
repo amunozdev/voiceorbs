@@ -40,7 +40,7 @@ const RecipesPage = () => (
       aria-label="Jump to a recipe"
       className="sticky top-14 z-30 -mx-4 mb-8 border-b border-border bg-background/80 px-4 py-2.5 backdrop-blur sm:-mx-5 sm:px-5"
     >
-      <ul className="flex gap-1.5 overflow-x-auto">
+      <ul className="flex gap-1.5 overflow-x-auto pr-6 [mask-image:linear-gradient(to_right,black_85%,transparent)] sm:pr-0 sm:[mask-image:none]">
         {recipes.map((recipe) => (
           <li key={recipe.id} className="shrink-0">
             <a

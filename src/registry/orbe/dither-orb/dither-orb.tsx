@@ -1,48 +1,33 @@
 'use client';
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Dithering } from '@paper-design/shaders-react';
 import {
-  approach,
+  blendEnergy,
+  blendStates,
+  clamp01,
   ERROR_COLOR_FROM,
   ERROR_COLOR_TO,
   hexToRgb,
   orbVars,
-  stateEnergy,
   type OrbProps,
   type OrbState,
 } from '../../lib/orb-state';
-import { observeActivity } from '../../lib/use-in-view';
+import { mixHex, mixRgb, rgbToHex, shadeHex, tintHex, type Rgb } from '../../lib/orb-color';
+import { useOrbAnimator, type OrbFrame } from '../../lib/use-orb-animator';
+import { useReducedMotion } from '../../lib/use-reduced-motion';
 import { useWebGLSupport } from '../../lib/use-webgl-support';
 
-const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+type ShaderUniforms = Record<string, number | number[]>;
 
-const subscribeReducedMotion = (onChange: () => void) => {
-  const mq = window.matchMedia(REDUCED_MOTION_QUERY);
-  mq.addEventListener('change', onChange);
-  return () => mq.removeEventListener('change', onChange);
-};
+interface PaperMount {
+  setUniforms: (uniforms: ShaderUniforms) => void;
+  setFrame: (frame: number) => void;
+}
 
-const useReducedMotion = () =>
-  useSyncExternalStore(
-    subscribeReducedMotion,
-    () => window.matchMedia(REDUCED_MOTION_QUERY).matches,
-    () => false,
-  );
-
-const mixHex = (a: string, b: string, t: number): string => {
-  const [ar, ag, ab] = hexToRgb(a);
-  const [br, bg, bb] = hexToRgb(b);
-  const channel = (x: number, y: number) =>
-    Math.round(x + (y - x) * t)
-      .toString(16)
-      .padStart(2, '0');
-  return `#${channel(ar, br)}${channel(ag, bg)}${channel(ab, bb)}`;
-};
-
-const shade = (hex: string, t: number) => mixHex(hex, '#000000', t);
-const tint = (hex: string, t: number) => mixHex(hex, '#ffffff', t);
+interface PaperHost {
+  paperShaderMount?: PaperMount;
+}
 
 const GL_ATTRIBUTES: WebGLContextAttributes = {
   antialias: true,
@@ -53,83 +38,40 @@ const GL_ATTRIBUTES: WebGLContextAttributes = {
 
 const CANVAS_OVERDRAW = 1.18;
 const TRANSPARENT = '#00000000';
-
+const DOT_PX = 2.8;
 const BASE_FRAME = 6000;
-const PUSH_INTERVAL_MS = 66;
-const MAX_DT = 0.1;
-const ENERGY_RATE = 7.5;
-const DOT_RATE = 6;
-const SPEED_RATE = 5;
-const SHIFT_RATE = 5;
-const PULSE_RATE = 6;
-const ERROR_RATE = 6;
 const STATIC_PHASE = 0.9;
+const MAX_PIXEL_RATIO = 2;
+const TAU = Math.PI * 2;
 
-const speedFor = (s: OrbState) =>
-  s === 'error'
-    ? 1.7
-    : s === 'listening'
-      ? 1.45
-      : s === 'speaking'
-        ? 1.15
-        : s === 'thinking'
-          ? 0.85
-          : s === 'connecting'
-            ? 0.45
-            : 0.25;
-
-const dotPxFor = (s: OrbState, energy: number) => {
-  switch (s) {
-    case 'listening':
-    case 'speaking':
-      return Math.max(1.6, 3.4 - energy * 1.5);
-    case 'thinking':
-      return 2.7;
-    case 'connecting':
-      return 3.2 - energy * 0.6;
-    case 'error':
-      return 2.2;
-    default:
-      return 3.4;
-  }
-};
-
-const shiftFor = (s: OrbState, energy: number) =>
-  s === 'thinking' ? 0.55 : Math.min(1, 0.25 + energy * 0.65);
-
-const pulseFor = (s: OrbState, energy: number) =>
-  s === 'disabled' ? 0.9 : Math.min(1.1, 0.9 + energy * 0.16);
-
-const shaderSpeedFor = (s: OrbState, multiplier: number) =>
-  s === 'disabled' ? 0 : speedFor(s) * multiplier;
-
-interface OrbMotion {
-  energy: number;
-  dotPx: number;
-  shaderSpeed: number;
+type DitherTune = {
+  flow: number;
   shift: number;
   pulse: number;
-  errorMix: number;
-}
+  outer: number;
+  inner: number;
+  beat: number;
+  beatRate: number;
+  error: number;
+};
 
-const motionSeed = (s: OrbState, multiplier: number): OrbMotion => ({
-  energy: 0,
-  dotPx: dotPxFor(s, 0),
-  shaderSpeed: shaderSpeedFor(s, multiplier),
-  shift: shiftFor(s, 0),
-  pulse: pulseFor(s, 0),
-  errorMix: s === 'error' ? 1 : 0,
-});
+const TUNE: Record<OrbState, DitherTune> = {
+  idle: { flow: 0.25, shift: 0.3, pulse: 0.9, outer: 0.25, inner: 0.2, beat: 0, beatRate: 0.3, error: 0 },
+  connecting: { flow: 0.35, shift: 0.36, pulse: 0.89, outer: 0.1, inner: 0.1, beat: 0.6, beatRate: 0.28, error: 0 },
+  listening: { flow: 0.55, shift: 0.3, pulse: 0.9, outer: 1, inner: 0.15, beat: 0, beatRate: 0.3, error: 0 },
+  thinking: { flow: 0.6, shift: 0.55, pulse: 0.9, outer: 0.1, inner: 0.1, beat: 1, beatRate: 0.5, error: 0 },
+  speaking: { flow: 1.1, shift: 0.42, pulse: 0.92, outer: 0.25, inner: 1, beat: 0, beatRate: 0.3, error: 0 },
+  error: { flow: 1.6, shift: 0.5, pulse: 0.95, outer: 0.2, inner: 0.2, beat: 0, beatRate: 0.3, error: 1 },
+  disabled: { flow: 0, shift: 0.3, pulse: 0.88, outer: 0, inner: 0, beat: 0, beatRate: 0.3, error: 0 },
+};
 
-const quantize = (value: number, steps: number) => Math.round(value * steps) / steps;
+const toShaderColor = ([r, g, b]: Rgb): number[] => [r / 255, g / 255, b / 255, 1];
 
-const sameMotion = (a: OrbMotion, b: OrbMotion) =>
-  a.energy === b.energy &&
-  a.dotPx === b.dotPx &&
-  a.shaderSpeed === b.shaderSpeed &&
-  a.shift === b.shift &&
-  a.pulse === b.pulse &&
-  a.errorMix === b.errorMix;
+const liveColors = (colorFrom: string, colorTo: string, errorMix: number, shift: number) => {
+  const from = mixRgb(hexToRgb(colorFrom), hexToRgb(ERROR_COLOR_FROM), errorMix);
+  const to = mixRgb(hexToRgb(colorTo), hexToRgb(ERROR_COLOR_TO), errorMix);
+  return { front: shadeHex(rgbToHex(mixRgb(from, to, clamp01(shift))), 0.08) };
+};
 
 export const DitherOrb = ({
   state = 'idle',
@@ -144,13 +86,15 @@ export const DitherOrb = ({
 }: OrbProps) => {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const sphereRef = useRef<HTMLDivElement>(null);
-  const stateRef = useRef(state);
-  const speedRef = useRef(speed);
+  const shaderRef = useRef<PaperHost | null>(null);
+  const clockRef = useRef({ phase: 0, shader: 0, beat: 0 });
   const reduced = useReducedMotion();
   const webgl = useWebGLSupport();
   const showShader = webgl === true;
-  const [motion, setMotion] = useState<OrbMotion>(() => motionSeed(state, speed));
-  const accRef = useRef<OrbMotion | null>(null);
+  const [seed] = useState(() => {
+    const tune = TUNE[state];
+    return { ...tune, ...liveColors(colorFrom, colorTo, tune.error, tune.shift) };
+  });
 
   const setRootRef = (node: HTMLDivElement | null) => {
     rootRef.current = node;
@@ -161,88 +105,37 @@ export const DitherOrb = ({
     }
   };
 
-  useEffect(() => {
-    stateRef.current = state;
-    speedRef.current = speed;
-  });
+  const bindShader = useCallback((node: PaperHost | null) => {
+    shaderRef.current = node;
+  }, []);
 
-  useEffect(() => {
-    if (reduced) return;
+  const onFrame = (frame: OrbFrame) => {
     const root = rootRef.current;
     if (!root) return;
-    if (accRef.current === null) {
-      accRef.current = motionSeed(stateRef.current, speedRef.current);
-    }
-    const acc = accRef.current;
-    let raf = 0;
-    let prev: number | null = null;
-    let clock = 0;
-    let lastPush = 0;
-    let active = true;
-    const frame = (now: number) => {
-      raf = 0;
-      const dt = Math.min(MAX_DT, prev === null ? 1 / 60 : (now - prev) / 1000);
-      prev = now;
-      const current = stateRef.current;
-      const multiplier = speedRef.current;
-      clock += dt * multiplier;
-      const live = levelRef?.current;
-      const hasLive = typeof live === 'number' && live >= 0;
-      acc.energy = approach(
-        acc.energy,
-        hasLive ? live : stateEnergy(current, clock),
-        ENERGY_RATE,
-        dt,
-      );
-      acc.dotPx = approach(acc.dotPx, dotPxFor(current, acc.energy), DOT_RATE, dt);
-      acc.shaderSpeed = approach(
-        acc.shaderSpeed,
-        shaderSpeedFor(current, multiplier),
-        SPEED_RATE,
-        dt,
-      );
-      acc.shift = approach(acc.shift, shiftFor(current, acc.energy), SHIFT_RATE, dt);
-      acc.pulse = approach(acc.pulse, pulseFor(current, acc.energy), PULSE_RATE, dt);
-      acc.errorMix = approach(acc.errorMix, current === 'error' ? 1 : 0, ERROR_RATE, dt);
-      root.style.setProperty('--orb-level', acc.energy.toFixed(3));
-      if (showShader && now - lastPush > PUSH_INTERVAL_MS) {
-        lastPush = now;
-        const next: OrbMotion = {
-          energy: quantize(acc.energy, 50),
-          dotPx: quantize(acc.dotPx, 50),
-          shaderSpeed: quantize(acc.shaderSpeed, 100),
-          shift: quantize(acc.shift, 100),
-          pulse: quantize(acc.pulse, 200),
-          errorMix: quantize(acc.errorMix, 100),
-        };
-        setMotion((prevMotion) => (sameMotion(prevMotion, next) ? prevMotion : next));
-      }
-      if (active) raf = requestAnimationFrame(frame);
-    };
-    const wake = () => {
-      if (raf === 0) {
-        prev = null;
-        raf = requestAnimationFrame(frame);
-      }
-    };
-    const halt = () => {
-      if (raf !== 0) {
-        cancelAnimationFrame(raf);
-        raf = 0;
-      }
-      prev = null;
-    };
-    const unobserve = observeActivity(root, (next) => {
-      active = next;
-      if (next) wake();
-      else halt();
+    const clock = clockRef.current;
+    const step = Math.max(0, frame.phase - clock.phase);
+    clock.phase = frame.phase;
+    const tune = blendStates(frame.weights, TUNE);
+    const level = frame.reduced ? blendEnergy(frame.weights, STATIC_PHASE) : frame.level;
+    clock.beat += step * tune.beatRate;
+    const wave = frame.reduced ? 0.5 : 0.5 - 0.5 * Math.cos(clock.beat * TAU);
+    const inner = level * tune.inner + wave * tune.beat * 0.4;
+    const outer = level * tune.outer + wave * tune.beat * 0.3;
+    clock.shader += step * (tune.flow + inner * 0.9);
+    const pulse = Math.min(1.1, tune.pulse + outer * 0.16);
+    root.style.setProperty('--orb-level', level.toFixed(4));
+    root.style.setProperty('--orb-outer', clamp01(outer).toFixed(4));
+    const mount = shaderRef.current?.paperShaderMount;
+    if (!mount) return;
+    const { front } = liveColors(colorFrom, colorTo, clamp01(tune.error), tune.shift + inner * 0.45);
+    mount.setUniforms({
+      u_colorFront: toShaderColor(hexToRgb(front)),
+      u_scale: pulse / CANVAS_OVERDRAW,
     });
-    wake();
-    return () => {
-      halt();
-      unobserve();
-    };
-  }, [levelRef, reduced, showShader]);
+    mount.setFrame(BASE_FRAME + clock.shader * 1000);
+  };
+
+  useOrbAnimator(rootRef, { state, levelRef, speed, onFrame });
 
   useEffect(() => {
     if (state !== 'error' || reduced) return;
@@ -262,31 +155,6 @@ export const DitherOrb = ({
     return () => shake.cancel();
   }, [state, reduced]);
 
-  const staticLevel = stateEnergy(state, STATIC_PHASE);
-  const view: OrbMotion = reduced
-    ? {
-        energy: staticLevel,
-        dotPx: dotPxFor(state, staticLevel),
-        shaderSpeed: 0,
-        shift: shiftFor(state, staticLevel),
-        pulse: pulseFor(state, staticLevel),
-        errorMix: state === 'error' ? 1 : 0,
-      }
-    : motion;
-  const errorMix = showShader ? view.errorMix : state === 'error' ? 1 : 0;
-  const from =
-    errorMix >= 1
-      ? ERROR_COLOR_FROM
-      : errorMix <= 0
-        ? colorFrom
-        : mixHex(colorFrom, ERROR_COLOR_FROM, errorMix);
-  const to =
-    errorMix >= 1
-      ? ERROR_COLOR_TO
-      : errorMix <= 0
-        ? colorTo
-        : mixHex(colorTo, ERROR_COLOR_TO, errorMix);
-  const front = shade(mixHex(from, to, view.shift), 0.08);
   const canvasSize = Math.round(size * CANVAS_OVERDRAW);
   const canvasOffset = Math.round((size - canvasSize) / 2);
   const fallbackLayers = [
@@ -295,8 +163,8 @@ export const DitherOrb = ({
   ].map(({ key, from: f, to: t, visible }) => ({
     key,
     visible,
-    body: `radial-gradient(circle, ${shade(mixHex(f, t, 0.5), 0.3)} 1.5px, transparent 2.1px)`,
-    glint: `radial-gradient(circle, ${tint(t, 0.2)} 1px, transparent 1.6px)`,
+    body: `radial-gradient(circle, ${shadeHex(mixHex(f, t, 0.5), 0.3)} 1.5px, transparent 2.1px)`,
+    glint: `radial-gradient(circle, ${tintHex(t, 0.2)} 1px, transparent 1.6px)`,
   }));
 
   return (
@@ -308,15 +176,13 @@ export const DitherOrb = ({
       className={className}
       style={{
         ...orbVars({ size, speed, colorFrom, colorTo }),
-        ...(reduced ? ({ '--orb-level': staticLevel.toFixed(3) } as CSSProperties) : null),
         width: size,
         height: size,
         position: 'relative',
         opacity: state === 'disabled' ? 0.5 : 1,
         filter: state === 'disabled' ? 'grayscale(0.85)' : 'grayscale(0)',
-        transform: showShader ? `scale(${(1 + view.energy * 0.05).toFixed(4)})` : undefined,
-        scale: showShader ? undefined : 'calc(1 + var(--orb-level, 0) * 0.05)',
-        transition: 'transform 0.2s ease-out, opacity 0.3s ease-out, filter 0.3s ease-out',
+        scale: showShader ? undefined : 'calc(1 + var(--orb-outer, 0) * 0.08)',
+        transition: 'opacity 0.6s ease-out, filter 0.6s ease-out',
       }}
     >
       <div
@@ -337,18 +203,20 @@ export const DitherOrb = ({
             }}
           >
             <Dithering
+              ref={bindShader}
               width={canvasSize}
               height={canvasSize}
               colorBack={TRANSPARENT}
-              colorFront={front}
+              colorFront={seed.front}
               shape="sphere"
               type="4x4"
-              size={view.dotPx}
-              scale={view.pulse / CANVAS_OVERDRAW}
-              speed={view.shaderSpeed}
+              size={DOT_PX}
+              scale={seed.pulse / CANVAS_OVERDRAW}
+              speed={0}
               frame={BASE_FRAME}
               fit="cover"
-              minPixelRatio={2}
+              minPixelRatio={MAX_PIXEL_RATIO}
+              maxPixelCount={canvasSize * canvasSize * MAX_PIXEL_RATIO * MAX_PIXEL_RATIO}
               webGlContextAttributes={GL_ATTRIBUTES}
             />
           </div>

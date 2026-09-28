@@ -1,48 +1,33 @@
 'use client';
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StaticRadialGradient } from '@paper-design/shaders-react';
 import {
-  approach,
+  blendEnergy,
+  blendStates,
+  clamp01,
   ERROR_COLOR_FROM,
   ERROR_COLOR_TO,
   hexToRgb,
   orbVars,
-  stateEnergy,
   type OrbProps,
   type OrbState,
 } from '../../lib/orb-state';
-import { observeActivity } from '../../lib/use-in-view';
+import { mixHex, mixRgb, rgbToHex, shadeHex, tintHex, type Rgb } from '../../lib/orb-color';
+import { useOrbAnimator, type OrbFrame } from '../../lib/use-orb-animator';
+import { useReducedMotion } from '../../lib/use-reduced-motion';
 import { useWebGLSupport } from '../../lib/use-webgl-support';
 
-const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+type ShaderUniforms = Record<string, number | number[] | number[][]>;
 
-const subscribeReducedMotion = (onChange: () => void) => {
-  const mq = window.matchMedia(REDUCED_MOTION_QUERY);
-  mq.addEventListener('change', onChange);
-  return () => mq.removeEventListener('change', onChange);
-};
+interface PaperMount {
+  setUniforms: (uniforms: ShaderUniforms) => void;
+  setFrame: (frame: number) => void;
+}
 
-const useReducedMotion = () =>
-  useSyncExternalStore(
-    subscribeReducedMotion,
-    () => window.matchMedia(REDUCED_MOTION_QUERY).matches,
-    () => false,
-  );
-
-const mixHex = (a: string, b: string, t: number): string => {
-  const [ar, ag, ab] = hexToRgb(a);
-  const [br, bg, bb] = hexToRgb(b);
-  const channel = (x: number, y: number) =>
-    Math.round(x + (y - x) * t)
-      .toString(16)
-      .padStart(2, '0');
-  return `#${channel(ar, br)}${channel(ag, bg)}${channel(ab, bb)}`;
-};
-
-const shade = (hex: string, t: number) => mixHex(hex, '#000000', t);
-const tint = (hex: string, t: number) => mixHex(hex, '#ffffff', t);
+interface PaperHost {
+  paperShaderMount?: PaperMount;
+}
 
 const withAlpha = (hex: string, alpha: number) =>
   `${hex}${Math.round(alpha * 255)
@@ -50,13 +35,13 @@ const withAlpha = (hex: string, alpha: number) =>
     .padStart(2, '0')}`;
 
 const brandPalette = (from: string, to: string): string[] => [
-  shade(to, 0.28),
-  shade(to, 0.08),
+  shadeHex(to, 0.28),
+  shadeHex(to, 0.08),
   to,
   mixHex(to, from, 0.55),
   from,
-  tint(from, 0.55),
-  tint(from, 0.94),
+  tintHex(from, 0.55),
+  tintHex(from, 0.94),
 ];
 
 const BLOOM_ALPHA = [0, 0.45, 0.92, 1, 1, 1, 1];
@@ -72,113 +57,43 @@ const GL_ATTRIBUTES: WebGLContextAttributes = {
   powerPreference: 'low-power',
 };
 
-const PUSH_INTERVAL_MS = 66;
-const MAX_DT = 0.1;
-const ENERGY_RATE = 7.5;
-const SHAPE_RATE = 6;
-const GRAIN_RATE = 6;
-const ERROR_RATE = 6;
-const ANGLE_RATE = 4;
 const STATIC_PHASE = 0.9;
 const STATIC_ANGLE = 215;
+const MAX_PIXEL_RATIO = 2;
+const TAU = Math.PI * 2;
 
-interface RadianceShape {
+type RadianceTune = {
+  spin: number;
+  flow: number;
   radius: number;
   focalDistance: number;
   falloff: number;
   distortion: number;
-}
-
-const shapeFor = (s: OrbState, energy: number): RadianceShape => {
-  switch (s) {
-    case 'listening':
-      return {
-        radius: 1 + energy * 0.08,
-        focalDistance: 0.22 + energy * 0.3,
-        falloff: 0.08 + energy * 0.5,
-        distortion: 0.05 + energy * 0.16,
-      };
-    case 'speaking':
-      return {
-        radius: 1.02 + energy * 0.1,
-        focalDistance: 0.26 + energy * 0.34,
-        falloff: 0.12 + energy * 0.55,
-        distortion: 0.07 + energy * 0.2,
-      };
-    case 'thinking':
-      return { radius: 1, focalDistance: 0.48, falloff: 0.22, distortion: 0.14 };
-    case 'connecting':
-      return {
-        radius: 0.98,
-        focalDistance: 0.12 + energy * 0.2,
-        falloff: -0.12 + energy * 0.35,
-        distortion: 0.04,
-      };
-    case 'error':
-      return { radius: 1.06, focalDistance: 0.5, falloff: 0.5, distortion: 0.34 };
-    case 'disabled':
-      return { radius: 0.96, focalDistance: 0.1, falloff: -0.3, distortion: 0 };
-    default:
-      return { radius: 1, focalDistance: 0.2, falloff: 0.16, distortion: 0.03 };
-  }
+  ripple: number;
+  grain: number;
+  outer: number;
+  inner: number;
+  beat: number;
+  beatRate: number;
+  error: number;
 };
 
-const grainFor = (s: OrbState) =>
-  s === 'error'
-    ? 0.14
-    : s === 'speaking'
-      ? 0.1
-      : s === 'listening'
-        ? 0.08
-        : s === 'thinking'
-          ? 0.06
-          : s === 'connecting'
-            ? 0.05
-            : 0.03;
+const TUNE: Record<OrbState, RadianceTune> = {
+  idle: { spin: 6, flow: 0.25, radius: 1, focalDistance: 0.2, falloff: 0.16, distortion: 0.04, ripple: 0.05, grain: 0.03, outer: 0.2, inner: 0.2, beat: 0, beatRate: 0.3, error: 0 },
+  connecting: { spin: 16, flow: 0.3, radius: 0.98, focalDistance: 0.16, falloff: -0.04, distortion: 0.05, ripple: 0.08, grain: 0.05, outer: 0.1, inner: 0.1, beat: 0.7, beatRate: 0.28, error: 0 },
+  listening: { spin: 10, flow: 0.45, radius: 1, focalDistance: 0.24, falloff: 0.1, distortion: 0.06, ripple: 0.08, grain: 0.08, outer: 1, inner: 0.2, beat: 0, beatRate: 0.3, error: 0 },
+  thinking: { spin: 48, flow: 0.5, radius: 1, focalDistance: 0.46, falloff: 0.22, distortion: 0.14, ripple: 0.14, grain: 0.06, outer: 0.1, inner: 0.1, beat: 1, beatRate: 0.5, error: 0 },
+  speaking: { spin: 18, flow: 0.9, radius: 1.02, focalDistance: 0.28, falloff: 0.16, distortion: 0.1, ripple: 0.2, grain: 0.1, outer: 0.3, inner: 1, beat: 0, beatRate: 0.3, error: 0 },
+  error: { spin: 80, flow: 1.2, radius: 1.06, focalDistance: 0.5, falloff: 0.5, distortion: 0.34, ripple: 0.25, grain: 0.14, outer: 0.2, inner: 0.2, beat: 0, beatRate: 0.3, error: 1 },
+  disabled: { spin: 0, flow: 0, radius: 0.96, focalDistance: 0.1, falloff: -0.3, distortion: 0, ripple: 0, grain: 0.02, outer: 0, inner: 0, beat: 0, beatRate: 0.3, error: 0 },
+};
 
-const angularVelFor = (s: OrbState, energy: number) =>
-  s === 'thinking'
-    ? 55
-    : s === 'error'
-      ? 90
-      : s === 'listening' || s === 'speaking'
-        ? 10 + energy * 22
-        : s === 'connecting'
-          ? 18
-          : s === 'disabled'
-            ? 0
-            : 6;
+const toShaderColor = ([r, g, b]: Rgb, alpha: number): number[] => [r / 255, g / 255, b / 255, alpha];
 
-interface RadianceMotion {
-  energy: number;
-  radius: number;
-  focalDistance: number;
-  focalAngle: number;
-  falloff: number;
-  distortion: number;
-  grain: number;
-  errorMix: number;
-}
-
-const motionSeed = (s: OrbState): RadianceMotion => ({
-  energy: 0,
-  ...shapeFor(s, 0),
-  focalAngle: STATIC_ANGLE,
-  grain: grainFor(s),
-  errorMix: s === 'error' ? 1 : 0,
-});
-
-const quantize = (value: number, steps: number) => Math.round(value * steps) / steps;
-
-const sameMotion = (a: RadianceMotion, b: RadianceMotion) =>
-  a.energy === b.energy &&
-  a.radius === b.radius &&
-  a.focalDistance === b.focalDistance &&
-  a.focalAngle === b.focalAngle &&
-  a.falloff === b.falloff &&
-  a.distortion === b.distortion &&
-  a.grain === b.grain &&
-  a.errorMix === b.errorMix;
+const livePalette = (colorFrom: string, colorTo: string, errorMix: number): Rgb[] =>
+  brandPalette(colorFrom, colorTo).map((stop, index) =>
+    mixRgb(hexToRgb(stop), hexToRgb(ERROR_PALETTE[index]), errorMix),
+  );
 
 export const RadianceOrb = ({
   state = 'idle',
@@ -193,14 +108,20 @@ export const RadianceOrb = ({
 }: OrbProps) => {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const sphereRef = useRef<HTMLDivElement>(null);
-  const stateRef = useRef(state);
-  const speedRef = useRef(speed);
-  const angularVelRef = useRef(0);
+  const shaderRef = useRef<PaperHost | null>(null);
+  const clockRef = useRef({ phase: 0, angle: STATIC_ANGLE, flow: 0, beat: 0, colors: '' });
   const reduced = useReducedMotion();
   const webgl = useWebGLSupport();
   const showShader = webgl === true;
-  const [motion, setMotion] = useState<RadianceMotion>(() => motionSeed(state));
-  const accRef = useRef<RadianceMotion | null>(null);
+  const [seed] = useState(() => {
+    const tune = TUNE[state];
+    return {
+      ...tune,
+      colors: livePalette(colorFrom, colorTo, tune.error).map((stop, index) =>
+        withAlpha(rgbToHex(stop), BLOOM_ALPHA[index]),
+      ),
+    };
+  });
 
   const setRootRef = (node: HTMLDivElement | null) => {
     rootRef.current = node;
@@ -211,94 +132,51 @@ export const RadianceOrb = ({
     }
   };
 
-  useEffect(() => {
-    stateRef.current = state;
-    speedRef.current = speed;
-  });
+  const bindShader = useCallback((node: PaperHost | null) => {
+    shaderRef.current = node;
+  }, []);
 
-  useEffect(() => {
-    if (reduced) return;
+  const onFrame = (frame: OrbFrame) => {
     const root = rootRef.current;
     if (!root) return;
-    if (accRef.current === null) {
-      accRef.current = motionSeed(stateRef.current);
+    const clock = clockRef.current;
+    const step = Math.max(0, frame.phase - clock.phase);
+    clock.phase = frame.phase;
+    const tune = blendStates(frame.weights, TUNE);
+    const level = frame.reduced ? blendEnergy(frame.weights, STATIC_PHASE) : frame.level;
+    clock.beat += step * tune.beatRate;
+    const wave = frame.reduced ? 0.5 : 0.5 - 0.5 * Math.cos(clock.beat * TAU);
+    const inner = level * tune.inner + wave * tune.beat * 0.4;
+    const outer = level * tune.outer + wave * tune.beat * 0.3;
+    clock.angle = (clock.angle + step * (tune.spin + inner * 24)) % 360;
+    clock.flow += step * (tune.flow + inner * 0.8);
+    const errorMix = clamp01(tune.error);
+    const palette = livePalette(colorFrom, colorTo, errorMix);
+    const from = rgbToHex(mixRgb(hexToRgb(colorFrom), hexToRgb(ERROR_COLOR_FROM), errorMix));
+    const to = rgbToHex(mixRgb(hexToRgb(colorTo), hexToRgb(ERROR_COLOR_TO), errorMix));
+    const colorKey = `${from}${to}`;
+    if (colorKey !== clock.colors) {
+      clock.colors = colorKey;
+      root.style.setProperty('--orb-live-from', from);
+      root.style.setProperty('--orb-live-to', to);
     }
-    const acc = accRef.current;
-    let raf = 0;
-    let prev: number | null = null;
-    let clock = 0;
-    let lastPush = 0;
-    let active = true;
-    const frame = (now: number) => {
-      raf = 0;
-      const dt = Math.min(MAX_DT, prev === null ? 1 / 60 : (now - prev) / 1000);
-      prev = now;
-      const current = stateRef.current;
-      const multiplier = speedRef.current;
-      clock += dt * multiplier;
-      const live = levelRef?.current;
-      const hasLive = typeof live === 'number' && live >= 0;
-      acc.energy = approach(
-        acc.energy,
-        hasLive ? live : stateEnergy(current, clock),
-        ENERGY_RATE,
-        dt,
-      );
-      const target = shapeFor(current, acc.energy);
-      acc.radius = approach(acc.radius, target.radius, SHAPE_RATE, dt);
-      acc.focalDistance = approach(acc.focalDistance, target.focalDistance, SHAPE_RATE, dt);
-      acc.falloff = approach(acc.falloff, target.falloff, SHAPE_RATE, dt);
-      acc.distortion = approach(acc.distortion, target.distortion, SHAPE_RATE, dt);
-      angularVelRef.current = approach(
-        angularVelRef.current,
-        angularVelFor(current, acc.energy) * multiplier,
-        ANGLE_RATE,
-        dt,
-      );
-      acc.focalAngle = (acc.focalAngle + angularVelRef.current * dt + 360) % 360;
-      acc.grain = approach(acc.grain, grainFor(current), GRAIN_RATE, dt);
-      acc.errorMix = approach(acc.errorMix, current === 'error' ? 1 : 0, ERROR_RATE, dt);
-      root.style.setProperty('--orb-level', acc.energy.toFixed(3));
-      if (showShader && now - lastPush > PUSH_INTERVAL_MS) {
-        lastPush = now;
-        const next: RadianceMotion = {
-          energy: quantize(acc.energy, 50),
-          radius: quantize(acc.radius, 200),
-          focalDistance: quantize(acc.focalDistance, 200),
-          focalAngle: quantize(acc.focalAngle, 4),
-          falloff: quantize(acc.falloff, 200),
-          distortion: quantize(acc.distortion, 200),
-          grain: quantize(acc.grain, 200),
-          errorMix: quantize(acc.errorMix, 100),
-        };
-        setMotion((prevMotion) => (sameMotion(prevMotion, next) ? prevMotion : next));
-      }
-      if (active) raf = requestAnimationFrame(frame);
-    };
-    const wake = () => {
-      if (raf === 0) {
-        prev = null;
-        raf = requestAnimationFrame(frame);
-      }
-    };
-    const halt = () => {
-      if (raf !== 0) {
-        cancelAnimationFrame(raf);
-        raf = 0;
-      }
-      prev = null;
-    };
-    const unobserve = observeActivity(root, (next) => {
-      active = next;
-      if (next) wake();
-      else halt();
+    root.style.setProperty('--orb-level', level.toFixed(4));
+    root.style.setProperty('--orb-outer', clamp01(outer).toFixed(4));
+    const mount = shaderRef.current?.paperShaderMount;
+    if (!mount) return;
+    mount.setUniforms({
+      u_colors: palette.map((stop, index) => toShaderColor(stop, BLOOM_ALPHA[index])),
+      u_radius: tune.radius + outer * 0.08,
+      u_focalDistance: tune.focalDistance + inner * 0.3,
+      u_focalAngle: clock.angle,
+      u_falloff: tune.falloff + inner * 0.5 + wave * tune.beat * 0.12,
+      u_distortion: clamp01(tune.distortion + inner * 0.18),
+      u_distortionShift: 0.2 + tune.ripple * Math.sin(clock.flow * TAU),
+      u_grainMixer: tune.grain,
     });
-    wake();
-    return () => {
-      halt();
-      unobserve();
-    };
-  }, [levelRef, reduced, showShader]);
+  };
+
+  useOrbAnimator(rootRef, { state, levelRef, speed, onFrame });
 
   useEffect(() => {
     if (state !== 'error' || reduced) return;
@@ -318,47 +196,18 @@ export const RadianceOrb = ({
     return () => shake.cancel();
   }, [state, reduced]);
 
-  const staticLevel = stateEnergy(state, STATIC_PHASE);
-  const view: RadianceMotion = reduced
-    ? {
-        energy: staticLevel,
-        ...shapeFor(state, staticLevel),
-        focalAngle: STATIC_ANGLE,
-        grain: grainFor(state),
-        errorMix: state === 'error' ? 1 : 0,
-      }
-    : motion;
-  const errorMix = showShader ? view.errorMix : state === 'error' ? 1 : 0;
-  const from =
-    errorMix >= 1
-      ? ERROR_COLOR_FROM
-      : errorMix <= 0
-        ? colorFrom
-        : mixHex(colorFrom, ERROR_COLOR_FROM, errorMix);
-  const to =
-    errorMix >= 1
-      ? ERROR_COLOR_TO
-      : errorMix <= 0
-        ? colorTo
-        : mixHex(colorTo, ERROR_COLOR_TO, errorMix);
-  const brandColors = brandPalette(colorFrom, colorTo);
-  const baseColors =
-    errorMix >= 1
-      ? ERROR_PALETTE
-      : errorMix <= 0
-        ? brandColors
-        : brandColors.map((stop, index) => mixHex(stop, ERROR_PALETTE[index], errorMix));
-  const colors = baseColors.map((stop, index) => withAlpha(stop, BLOOM_ALPHA[index]));
   const bloom = Math.round(size * BLOOM_SCALE);
   const pad = (bloom - size) / 2;
+  const liveFrom = `var(--orb-live-from, ${colorFrom})`;
+  const liveTo = `var(--orb-live-to, ${colorTo})`;
   const fallbackLayers = [
     { key: 'brand', from: colorFrom, to: colorTo, visible: state !== 'error' },
     { key: 'error', from: ERROR_COLOR_FROM, to: ERROR_COLOR_TO, visible: state === 'error' },
   ].map(({ key, from: f, to: t, visible }) => ({
     key,
     visible,
-    base: `radial-gradient(circle at 50% 46%, ${tint(f, 0.94)}, ${tint(f, 0.55)} 12%, ${f} 26%, ${mixHex(t, f, 0.55)} 42%, ${t} 58%, ${withAlpha(t, 0.4)} 76%, ${withAlpha(shade(t, 0.28), 0)} 100%)`,
-    glow: `radial-gradient(circle at 50% 46%, ${tint(f, 0.9)}, ${withAlpha(tint(f, 0.4), 0.65)} 20%, transparent 52%)`,
+    base: `radial-gradient(circle at 50% 46%, ${tintHex(f, 0.94)}, ${tintHex(f, 0.55)} 12%, ${f} 26%, ${mixHex(t, f, 0.55)} 42%, ${t} 58%, ${withAlpha(t, 0.4)} 76%, ${withAlpha(shadeHex(t, 0.28), 0)} 100%)`,
+    glow: `radial-gradient(circle at 50% 46%, ${tintHex(f, 0.9)}, ${withAlpha(tintHex(f, 0.4), 0.65)} 20%, transparent 52%)`,
   }));
 
   return (
@@ -370,15 +219,13 @@ export const RadianceOrb = ({
       className={className}
       style={{
         ...orbVars({ size, speed, colorFrom, colorTo }),
-        ...(reduced ? ({ '--orb-level': staticLevel.toFixed(3) } as CSSProperties) : null),
         width: size,
         height: size,
         position: 'relative',
         opacity: state === 'disabled' ? 0.5 : 1,
         filter: state === 'disabled' ? 'grayscale(0.85)' : 'grayscale(0)',
-        transform: showShader ? `scale(${(1 + view.energy * 0.06).toFixed(4)})` : undefined,
-        scale: showShader ? undefined : 'calc(1 + var(--orb-level, 0) * 0.06)',
-        transition: 'transform 0.2s ease-out, opacity 0.3s ease-out, filter 0.3s ease-out',
+        scale: 'calc(1 + var(--orb-outer, 0) * 0.06)',
+        transition: 'opacity 0.6s ease-out, filter 0.6s ease-out',
       }}
     >
       <div
@@ -386,14 +233,10 @@ export const RadianceOrb = ({
         style={{
           position: 'absolute',
           inset: -pad,
-          backgroundImage: `radial-gradient(circle, ${withAlpha(from, 0.5)}, ${withAlpha(to, 0.26)} 42%, ${withAlpha(to, 0)} 72%)`,
+          backgroundImage: `radial-gradient(circle, color-mix(in oklab, ${liveFrom} 50%, transparent), color-mix(in oklab, ${liveTo} 26%, transparent) 42%, transparent 72%)`,
           filter: `blur(${Math.round(size * 0.08)}px)`,
-          opacity: showShader
-            ? Math.min(1, 0.25 + view.energy * 0.6)
-            : 'calc(0.25 + var(--orb-level, 0) * 0.6)',
-          transform: showShader ? `scale(${(1 + view.energy * 0.08).toFixed(4)})` : undefined,
-          scale: showShader ? undefined : 'calc(1 + var(--orb-level, 0) * 0.08)',
-          transition: showShader ? 'opacity 0.2s ease-out, transform 0.2s ease-out' : undefined,
+          opacity: 'calc(0.25 + var(--orb-outer, 0) * 0.6 + var(--orb-level, 0) * 0.1)',
+          scale: 'calc(1 + var(--orb-outer, 0) * 0.1)',
         }}
       />
       <div
@@ -407,25 +250,27 @@ export const RadianceOrb = ({
       >
         {showShader ? (
           <StaticRadialGradient
+            ref={bindShader}
             width={bloom}
             height={bloom}
             colorBack={TRANSPARENT}
-            colors={colors}
-            radius={view.radius}
-            focalDistance={view.focalDistance}
-            focalAngle={view.focalAngle}
-            falloff={view.falloff}
+            colors={seed.colors}
+            radius={seed.radius}
+            focalDistance={seed.focalDistance}
+            focalAngle={STATIC_ANGLE}
+            falloff={seed.falloff}
             mixing={0.95}
-            distortion={view.distortion}
+            distortion={seed.distortion}
             distortionShift={0.2}
             distortionFreq={9}
-            grainMixer={view.grain}
+            grainMixer={seed.grain}
             grainOverlay={0.04}
             speed={0}
             frame={0}
             fit="cover"
             scale={1}
-            minPixelRatio={2}
+            minPixelRatio={MAX_PIXEL_RATIO}
+            maxPixelCount={bloom * bloom * MAX_PIXEL_RATIO * MAX_PIXEL_RATIO}
             webGlContextAttributes={GL_ATTRIBUTES}
           />
         ) : (

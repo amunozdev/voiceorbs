@@ -33,7 +33,7 @@ export const HeroShowcase = () => {
   return (
     <div
       ref={hostRef}
-      className="relative grid min-h-64 place-items-center rounded-3xl bg-[radial-gradient(circle_at_50%_45%,var(--orb-stage-from),transparent_70%)] sm:min-h-80"
+      className="relative grid min-h-64 place-items-center rounded-3xl bg-[radial-gradient(closest-side,var(--orb-stage-from),transparent)] sm:min-h-80"
     >
       <OrbMorphStage
         id="siri-sheet"

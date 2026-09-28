@@ -240,7 +240,7 @@ void main() {
   float glowAmt = uGlow * (1.0 + 0.9 * uHear * uLevel);
 
   if (r > rad * (1.01 + SOFT)) {
-    vec3 halo = glowCol * glowAmt * exp(-(r - rad) * 8.0);
+    vec3 halo = glowCol * glowAmt * exp(-(r - rad) * 11.0) * (1.0 - smoothstep(rad, 0.995, r));
     halo = clamp(halo, 0.0, 1.0);
     gl_FragColor = vec4(halo, max(halo.r, max(halo.g, halo.b))) * uFade;
     return;
@@ -292,7 +292,7 @@ void main() {
   float ballA = 1.0 - smoothstep(0.99 - SOFT, 1.01 + SOFT, pd);
   col = clamp(col * max(uExposure, 0.0), 0.0, 1.0) * ballA;
   float outside = smoothstep(rad - SOFT, rad + SOFT, r);
-  col += glowCol * glowAmt * exp(-max(r - rad, 0.0) * 8.0) * outside;
+  col += glowCol * glowAmt * exp(-max(r - rad, 0.0) * 11.0) * (1.0 - smoothstep(rad, 0.995, r)) * outside;
   col = clamp(col, 0.0, 1.0);
   float a = clamp(max(ballA, max(col.r, max(col.g, col.b))), 0.0, 1.0);
   gl_FragColor = vec4(col, a) * uFade;

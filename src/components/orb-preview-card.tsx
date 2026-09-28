@@ -8,7 +8,6 @@ import { observeActivity } from '@/registry/lib/use-in-view';
 import { useReducedMotion } from '@/registry/lib/use-reduced-motion';
 import { useOrbMessage } from '@/registry/lib/orb-pill';
 import { OrbMorphStage } from './orb-morph-stage';
-import { pillScaleFor } from './pill-scale';
 import { ArrowRightIcon } from './orb-icons';
 import { techInfo } from './tech-info';
 import { useStateCycle } from './use-demo-cycle';
@@ -25,6 +24,10 @@ const STATE_TEXT: Record<OrbState, string> = {
 };
 
 const PREVIEW_SIZE_CAP = 152;
+
+const NO_MORPH = new Set(['edge-glow']);
+
+const MORPH_SCALE: Record<string, number> = { 'pulse-orb': 1.5, 'siri-wave-line': 1.3 };
 
 const FEEDBACK_STEPS = [
   'Fetching prices',
@@ -48,7 +51,11 @@ export const OrbPreviewCard = ({ orb }: { orb: GalleryOrb }) => {
   const stageRef = useRef<HTMLDivElement>(null);
   const info = techInfo(orb.tech);
   const [steps] = useState(() => stepsFor(orb.id));
-  const message = useOrbMessage('thinking', { messages: { thinking: steps }, interval: 1700 });
+  const feedback = state === 'thinking' && !NO_MORPH.has(orb.id);
+  const message = useOrbMessage(feedback ? 'thinking' : 'idle', {
+    messages: { thinking: steps, idle: steps[0] },
+    interval: 2000,
+  });
 
   useEffect(() => {
     const el = stageRef.current;
@@ -86,9 +93,9 @@ export const OrbPreviewCard = ({ orb }: { orb: GalleryOrb }) => {
           colorFrom={orb.defaultColorFrom}
           colorTo={orb.defaultColorTo}
           label={`${orb.name} preview`}
-          feedback={state === 'thinking'}
+          feedback={feedback}
+          orbScale={MORPH_SCALE[orb.id] ?? 1}
           message={message}
-          orbScale={pillScaleFor(orb.id)}
         />
         <div
           aria-hidden="true"

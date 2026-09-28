@@ -49,8 +49,10 @@
 
 .copy {
   position: relative;
-  display: inline-block;
-  height: 1.3em;
+  display: block;
+  flex: none;
+  height: 1.4em;
+  line-height: 1.4;
   overflow: hidden;
   white-space: nowrap;
   transition: width 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -66,8 +68,9 @@
 .line {
   position: absolute;
   inset: 0 auto 0 0;
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  line-height: inherit;
   white-space: nowrap;
 }
 
@@ -84,11 +87,11 @@
 .char {
   display: inline-block;
   animation: char-in 0.46s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  animation-delay: calc(var(--i) * 18ms);
+  animation-delay: calc(120ms + var(--i) * 16ms);
 }
 
 .leaving {
-  animation: line-out 0.28s ease-in both;
+  animation: line-out 0.2s ease-in both;
   color: color-mix(in oklab, currentColor 55%, transparent);
 }
 

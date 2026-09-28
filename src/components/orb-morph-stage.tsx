@@ -80,7 +80,7 @@ export const OrbMorphStage = ({
       </div>
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 text-sm font-medium text-foreground motion-reduce:transition-none"
+        className="pointer-events-none absolute top-1/2 flex items-center text-sm font-medium text-foreground motion-reduce:transition-none"
         style={textStyle}
       >
         <OrbPillText key={feedback ? 'on' : 'off'} text={message} shimmer={isShimmerState(state)} onWidth={onWidth} />

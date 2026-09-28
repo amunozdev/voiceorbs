@@ -60,16 +60,18 @@ export const stateMotion = (state: OrbState): OrbMotion => {
   }
 };
 
+const wave = (x: number): number => 0.5 - 0.5 * Math.cos(x);
+
 export const stateEnergy = (state: OrbState, t: number): number => {
   switch (state) {
     case 'listening':
-      return 0.4 + 0.32 * Math.abs(Math.sin(t * 8.5)) + 0.18 * Math.abs(Math.sin(t * 4.1 + 1.5));
+      return 0.4 + 0.32 * wave(t * 17) + 0.18 * wave(t * 8.2 + 3);
     case 'speaking':
-      return 0.3 + 0.24 * Math.abs(Math.sin(t * 6.2)) + 0.16 * Math.abs(Math.sin(t * 3 + 0.6));
+      return 0.3 + 0.24 * wave(t * 12.4) + 0.16 * wave(t * 6 + 1.2);
     case 'thinking':
-      return 0.24 + 0.2 * Math.abs(Math.sin(t * 2.4));
+      return 0.24 + 0.2 * wave(t * 4.8);
     case 'connecting':
-      return 0.12 + 0.1 * Math.abs(Math.sin(t * 1.6));
+      return 0.12 + 0.1 * wave(t * 3.2);
     case 'error':
       return 0.2;
     default:
@@ -87,6 +89,16 @@ export interface StateMix {
   update: (state: OrbState, dt: number, rate?: number) => StateWeights;
 }
 
+export const ENTER_RATE = 14;
+export const SETTLE_RATE = 5;
+export const ERROR_RATE = 10;
+
+export const stateRate = (state: OrbState): number => {
+  if (state === 'idle' || state === 'disabled') return SETTLE_RATE;
+  if (state === 'error') return ERROR_RATE;
+  return ENTER_RATE;
+};
+
 export const createStateMix = (initial: OrbState = 'idle'): StateMix => {
   const weights: StateWeights = {
     idle: 0,
@@ -99,7 +111,7 @@ export const createStateMix = (initial: OrbState = 'idle'): StateMix => {
   };
   weights[initial] = 1;
   const keys = Object.keys(weights) as OrbState[];
-  const update = (state: OrbState, dt: number, rate = 6): StateWeights => {
+  const update = (state: OrbState, dt: number, rate = stateRate(state)): StateWeights => {
     let total = 0;
     for (const key of keys) {
       const target = key === state ? 1 : 0;
@@ -114,6 +126,30 @@ export const createStateMix = (initial: OrbState = 'idle'): StateMix => {
   };
   return { weights, update };
 };
+
+export const blendStates = <T extends Record<string, number>>(
+  weights: StateWeights,
+  table: Record<OrbState, T>,
+): T => {
+  const out = {} as Record<string, number>;
+  for (const key of Object.keys(weights) as OrbState[]) {
+    const w = weights[key];
+    if (w === 0) continue;
+    const row = table[key];
+    for (const param of Object.keys(row)) out[param] = (out[param] ?? 0) + row[param] * w;
+  }
+  return out as T;
+};
+
+export const blendEnergy = (weights: StateWeights, t: number): number => {
+  let energy = 0;
+  for (const key of Object.keys(weights) as OrbState[]) {
+    if (weights[key] > 0) energy += weights[key] * stateEnergy(key, t);
+  }
+  return energy;
+};
+
+export const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
 export const orbVars = ({
   size,

@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
 import { ORB_STATES, type OrbState } from '@/registry/lib/orb-state';
@@ -180,6 +181,20 @@ ${usageFile.code}\`\`\``,
   );
 
   const reactive = state === 'listening' || state === 'speaking';
+  const reactiveRef = useRef(reactive);
+
+  useEffect(() => {
+    reactiveRef.current = reactive;
+  }, [reactive]);
+
+  const stageLevelRef = useMemo<RefObject<number>>(
+    () => ({
+      get current() {
+        return reactiveRef.current ? levelRef.current : -1;
+      },
+    }),
+    [levelRef],
+  );
 
   const selectState = (next: OrbState) => {
     demo.stop();
@@ -238,7 +253,7 @@ ${usageFile.code}\`\`\``,
             speed={speed}
             colorFrom={colorFrom}
             colorTo={colorTo}
-            levelRef={reactive ? levelRef : undefined}
+            levelRef={stageLevelRef}
             label={orb.name}
           />
         </div>

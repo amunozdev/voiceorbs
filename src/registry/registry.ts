@@ -27,6 +27,9 @@ const SHARED_FILES: OrbFile[] = [
   { label: 'lib/use-waveform.ts', path: 'src/registry/lib/use-waveform.ts', lang: 'ts' },
   { label: 'lib/use-orb-cues.ts', path: 'src/registry/lib/use-orb-cues.ts', lang: 'ts' },
   { label: 'lib/orb-status.tsx', path: 'src/registry/lib/orb-status.tsx', lang: 'tsx' },
+  { label: 'lib/orb-color.ts', path: 'src/registry/lib/orb-color.ts', lang: 'ts' },
+  { label: 'lib/use-reduced-motion.ts', path: 'src/registry/lib/use-reduced-motion.ts', lang: 'ts' },
+  { label: 'lib/use-orb-animator.ts', path: 'src/registry/lib/use-orb-animator.ts', lang: 'ts' },
 ];
 
 export { SHARED_FILES };
@@ -377,6 +380,58 @@ export const draftOrbs: OrbMeta[] = [
     defaultSize: 168,
     files: [
       { label: 'grain-orb.tsx', path: 'src/registry/orbe/grain-orb/grain-orb.tsx', lang: 'tsx' },
+    ],
+  },
+  {
+    id: 'siri-sheet',
+    name: 'Siri Sheet',
+    tagline: 'Glass sphere with a luminous sheet of light inside; the rim refracts and splits color. Raw WebGL, zero dependencies.',
+    tech: 'Shader (canvas)',
+    dependencies: [],
+    defaultColorFrom: '#82f4ff',
+    defaultColorTo: '#8e6cff',
+    defaultSize: 168,
+    files: [
+      { label: 'siri-sheet.tsx', path: 'src/registry/orbe/siri-sheet/siri-sheet.tsx', lang: 'tsx' },
+    ],
+  },
+  {
+    id: 'duotone-flow',
+    name: 'Duotone Flow',
+    tagline: 'Two-color flowing disc: your voice ripples the rings, the agent voice stirs the core. Raw WebGL, zero dependencies.',
+    tech: 'Shader (canvas)',
+    dependencies: [],
+    defaultColorFrom: '#38bdf8',
+    defaultColorTo: '#f472b6',
+    defaultSize: 168,
+    files: [
+      { label: 'duotone-flow.tsx', path: 'src/registry/orbe/duotone-flow/duotone-flow.tsx', lang: 'tsx' },
+    ],
+  },
+  {
+    id: 'aura-field',
+    name: 'Aura Field',
+    tagline: 'Undulating ring of energy that springs open when it starts listening. Raw WebGL, zero dependencies.',
+    tech: 'Shader (canvas)',
+    dependencies: [],
+    defaultColorFrom: '#34d399',
+    defaultColorTo: '#60a5fa',
+    defaultSize: 168,
+    files: [
+      { label: 'aura-field.tsx', path: 'src/registry/orbe/aura-field/aura-field.tsx', lang: 'tsx' },
+    ],
+  },
+  {
+    id: 'siri-wave-line',
+    name: 'Siri Wave Line',
+    tagline: 'Overlapping fluorescent sine waves that flatten at rest and surge with the voice.',
+    tech: 'Canvas',
+    dependencies: [],
+    defaultColorFrom: '#22d3ee',
+    defaultColorTo: '#e879f9',
+    defaultSize: 168,
+    files: [
+      { label: 'siri-wave-line.tsx', path: 'src/registry/orbe/siri-wave-line/siri-wave-line.tsx', lang: 'tsx' },
     ],
   },
 ];

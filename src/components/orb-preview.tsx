@@ -54,6 +54,18 @@ const DEFERRED_MAP: Record<string, ComponentType<OrbProps>> = {
   'mercury-orb': dynamic(() => import('@/registry/orbe/mercury-orb/mercury-orb').then((m) => m.MercuryOrb), {
     ssr: false,
   }),
+  'siri-sheet': dynamic(() => import('@/registry/orbe/siri-sheet/siri-sheet').then((m) => m.SiriSheet), {
+    ssr: false,
+  }),
+  'duotone-flow': dynamic(() => import('@/registry/orbe/duotone-flow/duotone-flow').then((m) => m.DuotoneFlow), {
+    ssr: false,
+  }),
+  'aura-field': dynamic(() => import('@/registry/orbe/aura-field/aura-field').then((m) => m.AuraField), {
+    ssr: false,
+  }),
+  'siri-wave-line': dynamic(() => import('@/registry/orbe/siri-wave-line/siri-wave-line').then((m) => m.SiriWaveLine), {
+    ssr: false,
+  }),
 };
 
 const DeferredOrb = ({ orb: Orb, ...props }: OrbProps & { orb: ComponentType<OrbProps> }) => {

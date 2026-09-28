@@ -27,7 +27,7 @@ const PREVIEW_SIZE_CAP = 152;
 
 const NO_MORPH = new Set(['edge-glow']);
 
-const MORPH_SCALE: Record<string, number> = { 'pulse-orb': 1.5, 'siri-wave-line': 1.3 };
+const MORPH_SCALE: Record<string, number> = { 'pulse-orb': 1.5, 'siri-wave-line': 1.3, 'aurora-orb': 0.66 };
 
 const FEEDBACK_STEPS = [
   'Fetching prices',

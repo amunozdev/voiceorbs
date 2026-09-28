@@ -394,6 +394,7 @@ export const NebulaScene = ({
       camera={{ position: [0, 0, 3.6], fov: 45 }}
       gl={{ antialias: true, alpha: true }}
       dpr={[1, 2]}
+      resize={{ offsetSize: true }}
     >
       <Sphere
         state={state}

@@ -31,7 +31,7 @@ interface PaperHost {
 }
 
 const GL_ATTRIBUTES: WebGLContextAttributes = {
-  antialias: true,
+  antialias: false,
   powerPreference: 'low-power',
 };
 
@@ -145,6 +145,7 @@ export const MercuryOrb = ({
     root.style.setProperty('--orb-outer', clamp01(outer).toFixed(4));
     const mount = shaderRef.current?.paperShaderMount;
     if (!mount) return;
+    Reflect.set(mount, 'currentFrame', BASE_FRAME + clock.shader * 1000);
     mount.setUniforms({
       u_colorBack: toShaderColor(hexToRgb(colors.back)),
       u_colorTint: toShaderColor(hexToRgb(colors.tint)),
@@ -155,7 +156,6 @@ export const MercuryOrb = ({
       u_shiftRed: 0.3 + errorMix * 0.3,
       u_shiftBlue: 0.3 - errorMix * 0.3,
     });
-    mount.setFrame(BASE_FRAME + clock.shader * 1000);
   };
 
   useOrbAnimator(rootRef, { state, levelRef, speed, onFrame });
@@ -247,7 +247,7 @@ export const MercuryOrb = ({
             angle={STRIPE_ANGLE}
             speed={0}
             frame={BASE_FRAME}
-            minPixelRatio={MAX_PIXEL_RATIO}
+            minPixelRatio={1}
             maxPixelCount={size * size * MAX_PIXEL_RATIO * MAX_PIXEL_RATIO}
             webGlContextAttributes={GL_ATTRIBUTES}
           />

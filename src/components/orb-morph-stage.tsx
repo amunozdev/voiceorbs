@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { OrbState } from '@/registry/lib/orb-state';
 import { OrbPillText, isShimmerState } from '@/registry/lib/orb-pill';
@@ -36,6 +36,16 @@ export const OrbMorphStage = ({
   orbScale = 1,
 }: OrbMorphStageProps) => {
   const [textWidth, setTextWidth] = useState(0);
+  const [lingering, setLingering] = useState(false);
+  const showText = feedback || lingering;
+
+  if (feedback && !lingering) setLingering(true);
+
+  useEffect(() => {
+    if (feedback || !lingering) return;
+    const id = window.setTimeout(() => setLingering(false), 450);
+    return () => window.clearTimeout(id);
+  }, [feedback, lingering]);
   const onWidth = useCallback((width: number) => setTextWidth(width), []);
 
   const box = PILL_ORB + PILL_PAD * 2;
@@ -83,7 +93,7 @@ export const OrbMorphStage = ({
         className="pointer-events-none absolute top-1/2 flex items-center text-sm font-medium text-foreground motion-reduce:transition-none"
         style={textStyle}
       >
-        <OrbPillText key={feedback ? 'on' : 'off'} text={message} shimmer={isShimmerState(state)} onWidth={onWidth} />
+        {showText && <OrbPillText text={message} shimmer={isShimmerState(state)} onWidth={onWidth} />}
       </div>
     </div>
   );

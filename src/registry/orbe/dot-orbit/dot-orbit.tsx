@@ -41,7 +41,7 @@ const brandPalette = (from: string, to: string): string[] => [
 const ERROR_PALETTE = brandPalette(ERROR_COLOR_FROM, ERROR_COLOR_TO);
 
 const GL_ATTRIBUTES: WebGLContextAttributes = {
-  antialias: true,
+  antialias: false,
   powerPreference: 'low-power',
 };
 
@@ -150,12 +150,12 @@ export const DotOrbit = ({
     root.style.setProperty('--orb-inner', clamp01(inner).toFixed(4));
     const mount = shaderRef.current?.paperShaderMount;
     if (!mount) return;
+    Reflect.set(mount, 'currentFrame', BASE_FRAME + clock.shader * 1000);
     mount.setUniforms({
       u_colors: livePalette(colorFrom, colorTo, errorMix).map(toShaderColor),
       u_size: clamp01(tune.dotSize + inner * 0.3),
       u_spreading: clamp01(tune.spreading + outer * 0.5 + wave * tune.beat * 0.2),
     });
-    mount.setFrame(BASE_FRAME + clock.shader * 1000);
   };
 
   useOrbAnimator(rootRef, { state, levelRef, speed, onFrame });
@@ -318,7 +318,7 @@ export const DotOrbit = ({
               scale={0.62}
               speed={0}
               frame={BASE_FRAME}
-              minPixelRatio={MAX_PIXEL_RATIO}
+              minPixelRatio={1}
               maxPixelCount={Math.round(size * RING_SCALE * size * RING_SCALE * MAX_PIXEL_RATIO * MAX_PIXEL_RATIO)}
               webGlContextAttributes={GL_ATTRIBUTES}
             />

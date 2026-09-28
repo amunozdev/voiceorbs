@@ -79,12 +79,12 @@
 
 .char {
   display: inline-block;
-  animation: char-in 0.46s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: char-in 0.46s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
   animation-delay: calc(120ms + var(--i) * 16ms);
 }
 
 .leaving {
-  animation: line-out 0.2s ease-in both;
+  animation: line-out 0.2s ease-in forwards;
   color: color-mix(in oklab, currentColor 55%, transparent);
 }
 
@@ -105,12 +105,12 @@
   background-clip: text;
   opacity: 0;
   transition: opacity 0.4s ease;
-  animation: sweep 2.35s ease-in-out infinite;
   pointer-events: none;
 }
 
 .copy[data-shimmer] .sheen {
   opacity: 1;
+  animation: sweep 2.35s ease-in-out infinite;
 }
 
 .srOnly {

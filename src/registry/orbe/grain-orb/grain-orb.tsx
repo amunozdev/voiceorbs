@@ -42,7 +42,7 @@ const brandPalette = (from: string, to: string): string[] => [
 const ERROR_PALETTE = brandPalette(ERROR_COLOR_FROM, ERROR_COLOR_TO);
 
 const GL_ATTRIBUTES: WebGLContextAttributes = {
-  antialias: true,
+  antialias: false,
   alpha: true,
   powerPreference: 'low-power',
 };
@@ -153,6 +153,7 @@ export const GrainOrb = ({
     root.style.setProperty('--orb-swell', swell.toFixed(4));
     const mount = shaderRef.current?.paperShaderMount;
     if (!mount) return;
+    Reflect.set(mount, 'currentFrame', BASE_FRAME + clock.shader * 1000);
     mount.setUniforms({
       u_colors: livePalette(colorFrom, colorTo, errorMix).map(toShaderColor),
       u_softness: Math.max(0.02, tune.softness - inner * 0.06),
@@ -160,7 +161,6 @@ export const GrainOrb = ({
       u_noise: clamp01(tune.noise + inner * 0.35),
       u_scale: BASE_SCALE + swell * 0.06,
     });
-    mount.setFrame(BASE_FRAME + clock.shader * 1000);
   };
 
   useOrbAnimator(rootRef, { state, levelRef, speed, onFrame });
@@ -257,7 +257,7 @@ export const GrainOrb = ({
               scale={BASE_SCALE + seed.swell * 0.06}
               speed={0}
               frame={BASE_FRAME}
-              minPixelRatio={MAX_PIXEL_RATIO}
+              minPixelRatio={1}
               maxPixelCount={size * size * MAX_PIXEL_RATIO * MAX_PIXEL_RATIO}
               webGlContextAttributes={GL_ATTRIBUTES}
             />

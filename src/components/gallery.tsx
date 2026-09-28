@@ -1,13 +1,15 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
 import type { AdapterFilesWithCode, FileWithCode } from '@/registry/prompt';
-import { OrbCard } from './orb-card';
 import { OrbPreviewCard } from './orb-preview-card';
 import { GalleryFilters } from './gallery-filters';
 import { ComingSoonCard } from './coming-soon-card';
 import { sortTechs } from './tech-info';
 import type { GalleryOrb } from './gallery-orb';
+
+const OrbCard = dynamic(() => import('./orb-card').then((m) => m.OrbCard));
 
 export interface GalleryPlayground {
   files: Record<string, FileWithCode[]>;

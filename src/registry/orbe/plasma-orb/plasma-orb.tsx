@@ -40,7 +40,7 @@ const brandPalette = (from: string, to: string): string[] => [
 const ERROR_PALETTE = brandPalette(ERROR_COLOR_FROM, ERROR_COLOR_TO);
 
 const GL_ATTRIBUTES: WebGLContextAttributes = {
-  antialias: true,
+  antialias: false,
   powerPreference: 'low-power',
 };
 
@@ -141,13 +141,13 @@ export const PlasmaOrb = ({
     root.style.setProperty('--orb-outer', clamp01(outer).toFixed(4));
     const mount = shaderRef.current?.paperShaderMount;
     if (!mount) return;
+    Reflect.set(mount, 'currentFrame', BASE_FRAME + clock.shader * 1000);
     mount.setUniforms({
       u_colors: palette.map(toShaderColor),
       u_distortion: clamp01(tune.distortion + inner * 0.4),
       u_swirl: clamp01(tune.swirl + inner * 0.15 + wave * tune.beat * 0.15),
       u_grainMixer: tune.grain,
     });
-    mount.setFrame(BASE_FRAME + clock.shader * 1000);
   };
 
   useOrbAnimator(rootRef, { state, levelRef, speed, onFrame });
@@ -233,7 +233,7 @@ export const PlasmaOrb = ({
             frame={BASE_FRAME}
             grainMixer={seed.grain}
             grainOverlay={0.05}
-            minPixelRatio={MAX_PIXEL_RATIO}
+            minPixelRatio={1}
             maxPixelCount={size * size * MAX_PIXEL_RATIO * MAX_PIXEL_RATIO}
             webGlContextAttributes={GL_ATTRIBUTES}
           />

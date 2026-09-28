@@ -53,7 +53,7 @@ const BLOOM_MASK =
 const ERROR_PALETTE = brandPalette(ERROR_COLOR_FROM, ERROR_COLOR_TO);
 
 const GL_ATTRIBUTES: WebGLContextAttributes = {
-  antialias: true,
+  antialias: false,
   powerPreference: 'low-power',
 };
 
@@ -269,7 +269,7 @@ export const RadianceOrb = ({
             frame={0}
             fit="cover"
             scale={1}
-            minPixelRatio={MAX_PIXEL_RATIO}
+            minPixelRatio={1}
             maxPixelCount={bloom * bloom * MAX_PIXEL_RATIO * MAX_PIXEL_RATIO}
             webGlContextAttributes={GL_ATTRIBUTES}
           />

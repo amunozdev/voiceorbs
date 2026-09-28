@@ -30,7 +30,7 @@ interface PaperHost {
 }
 
 const GL_ATTRIBUTES: WebGLContextAttributes = {
-  antialias: true,
+  antialias: false,
   alpha: true,
   premultipliedAlpha: true,
   powerPreference: 'low-power',
@@ -128,11 +128,11 @@ export const DitherOrb = ({
     const mount = shaderRef.current?.paperShaderMount;
     if (!mount) return;
     const { front } = liveColors(colorFrom, colorTo, clamp01(tune.error), tune.shift + inner * 0.45);
+    Reflect.set(mount, 'currentFrame', BASE_FRAME + clock.shader * 1000);
     mount.setUniforms({
       u_colorFront: toShaderColor(hexToRgb(front)),
       u_scale: pulse / CANVAS_OVERDRAW,
     });
-    mount.setFrame(BASE_FRAME + clock.shader * 1000);
   };
 
   useOrbAnimator(rootRef, { state, levelRef, speed, onFrame });
@@ -215,7 +215,7 @@ export const DitherOrb = ({
               speed={0}
               frame={BASE_FRAME}
               fit="cover"
-              minPixelRatio={MAX_PIXEL_RATIO}
+              minPixelRatio={1}
               maxPixelCount={canvasSize * canvasSize * MAX_PIXEL_RATIO * MAX_PIXEL_RATIO}
               webGlContextAttributes={GL_ATTRIBUTES}
             />

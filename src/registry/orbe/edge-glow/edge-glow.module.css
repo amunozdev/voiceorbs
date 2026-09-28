@@ -266,7 +266,7 @@
   letter-spacing: 0.02em;
   color: light-dark(rgb(30 41 59 / 0.75), rgb(226 232 240 / 0.8));
   opacity: var(--orb-label-opacity, 1);
-  transition: opacity 0.3s ease;
+  transition: opacity var(--orb-label-duration, 0.3s) ease var(--orb-label-delay, 0s);
 }
 
 @keyframes edgeSpin {

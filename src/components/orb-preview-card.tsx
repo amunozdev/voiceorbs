@@ -25,8 +25,6 @@ const STATE_TEXT: Record<OrbState, string> = {
 
 const PREVIEW_SIZE_CAP = 152;
 
-const MORPH_SCALE: Record<string, number> = { 'pulse-orb': 1.5, 'siri-wave-line': 1.3, 'aurora-orb': 0.66 };
-
 const FEEDBACK_STEPS = [
   'Fetching prices',
   'Running the numbers',
@@ -92,7 +90,6 @@ export const OrbPreviewCard = ({ orb }: { orb: GalleryOrb }) => {
           colorTo={orb.defaultColorTo}
           label={`${orb.name} preview`}
           feedback={feedback}
-          orbScale={MORPH_SCALE[orb.id] ?? 1}
           message={message}
         />
         <div
